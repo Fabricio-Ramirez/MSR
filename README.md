@@ -1,30 +1,6 @@
-# Obligatorio MSR en Docker sobre una VM de VirtualBox
+# Obligatorio Monitoreo y Supervisión de Redes en Docker sobre una VM de VirtualBox
 
-Implementa la arquitectura de `Obligatorio_MSR_2026_Propuesta_Solucion_Reducida.docx`
-con contenedores dentro de **una VM Ubuntu nueva**. No usa la VM del curso ni Docker en Windows.
-
-**Estado (16/11/2026).** La versión sin TLS se desplegó de cero en la VM `srvmonitoreo`
-—borrando el proyecto anterior— y `scripts/verificar.sh` dio **34 correctas y 0 fallidas**,
-incluidas las seis comprobaciones de IP fija. Docker en la VM es la **29.9.3**, con backend
-de firewall `iptables`. La red está lista: NAT con los redirects persistidos, host-only fijo
-en `192.168.57.10` y la subred `192.168.56.0/24` exclusiva de Docker.
-
-> Si corrés `verificar.sh` apenas termina `docker compose up`, es normal que fallen
-> `web01 -> zabbix-server TCP 10051` y `web01 -> Loki`: ninguno de los dos está escuchando
-> todavía. Esperá los dos minutos que pide el apartado 3 y volvé a correrlo.
-
-`scripts/acceso-lan.sh` se ejecutó el 16/11/2026 y dejó instalada la unidad
-`acceso-lab.service`, activa. Es el camino **alternativo** del apartado 4; el principal
-pasó a ser `scripts/puente-lab.sh`, que a la fecha **todavía no se ejecutó** porque
-requiere agregarle un adaptador a la VM con la máquina apagada.
-
-La versión anterior, la que todavía usaba TLS, había dado 22 correctas y 0 fallidas; de ahí
-se le quitaron los certificados y todo pasó a HTTP.
-
-**El cifrado que pide la letra** ("siempre que sea posible, utilice protocolos que cifren
-la información, ej. SNMPv3") lo aportan **SNMPv3 authPriv** con SHA/AES y la **TLS-PSK**
-del agente Zabbix. Ninguno de los dos usa certificados: SNMPv3 no tiene comunidades ni
-X.509, usa el modelo USM con usuario y dos passphrases.
+Implementa la arquitectura de contenedores dentro de **una VM Ubuntu nueva**. No usa la VM del curso ni Docker en Windows.
 
 ## Los tres documentos
 
@@ -32,12 +8,8 @@ Todo lo que hace falta está en esta carpeta, que es lo que se versiona:
 
 | Archivo | Para qué |
 |---|---|
-| **`README.md`** | Este. Qué es el proyecto, cómo está armado, cómo se accede y los problemas que aparecieron, con su causa raíz |
+| **`README.md`** | Qué es el proyecto, cómo está armado, cómo se accede y los problemas que aparecieron, con su causa raíz |
 | **`PUESTA-EN-MARCHA.md`** | El paso a paso de cero: crear la VM, la red de VirtualBox, instalar Docker, levantar el stack y abrir las IP de la documentación |
-| **`EVIDENCIAS-Y-PENDIENTES.md`** | Qué falta hacer a mano en Zabbix y qué captura pide cada recuadro `[EVIDENCIA]` de la propuesta |
-
-Si venís de cero, empezá por `PUESTA-EN-MARCHA.md`. Si el laboratorio ya está levantado y
-lo que querés es la entrega, andá a `EVIDENCIAS-Y-PENDIENTES.md`.
 
 ## Inicio rápido
 
@@ -351,35 +323,6 @@ acceso a la VM metiendo `enp0s8` en un puente por error.
 podría—, el tráfico puenteado empezaría a pasar por `iptables`. Está cubierto: las reglas
 `ACCEPT` que dejó `scripts/acceso-lan.sh` en `DOCKER-USER` siguen instaladas y lo permiten.
 
-#### Opción B (alternativa): enrutar desde Windows
-
-Es la que estaba antes. La VM hace de router: se agrega una ruta estática en Windows y dos
-reglas en `DOCKER-USER`, porque Docker deja `FORWARD` en `DROP` y sólo abre los puertos
-publicados.
-
-```bash
-sudo scripts/acceso-lan.sh        # en la VM; ya ejecutado el 16/11/2026
-```
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\ruta-windows.ps1
-```
-
-El equivalente a mano de lo segundo es
-`route -p add 192.168.56.0 mask 255.255.255.0 192.168.57.10`, y se saca con
-`scripts\ruta-windows.ps1 -Quitar`.
-
-Ventaja: no hay que apagar la VM ni agregarle hardware. Desventaja: son dos piezas en vez
-de una, y depende de reglas de firewall que hay que mantener.
-
-> **No uses las dos a la vez.** Si Windows tiene un adaptador en `192.168.56.1/24`, esa red
-> le queda directamente conectada y la ruta estática de la opción B nunca se usa.
-> `ruta-windows.ps1` te avisa si detecta ese caso.
-
-Para qué sirve cualquiera de las dos: las capturas de la entrega muestran las direcciones
-que figuran en la propuesta en vez de `localhost:844x`, y la URL de la fuente de datos de
-Zabbix en Grafana se puede verificar en el navegador antes de pegarla.
-
 ### La página de la tienda
 
 `web01/www/index.html` sirve un catálogo con carrito, para que las capturas de la entrega
@@ -465,10 +408,6 @@ Cada prueba imprime la hora de inicio y de fin para completar la tabla 7.
 
 ## Diferencias con la propuesta
 
-**Conviene documentar estas diferencias en la entrega.** La letra no exige máquinas
-virtuales separadas, pero **confirmá con tu docente que acepta esta implementación antes
-de la defensa**.
-
 | Propuesta | Esta implementación | Consecuencia |
 |---|---|---|
 | `web01` y `mon01` son VM separadas | Contenedores en una sola VM | Si la VM cae, cae todo; esto debilita el argumento de separación de funciones |
@@ -486,13 +425,7 @@ de la defensa**.
 En P2, si el sistema queda sin memoria, se prioriza terminar `web01` y no Zabbix
 (`oom_score_adj`). Revisá `dmesg` después de la prueba.
 
-Igual que la propuesta, este laboratorio **no tiene firewall ni segmentación**: todos los
-contenedores comparten una red plana. Eso es justamente lo que la §6.5 de la propuesta
-plantea como mejora.
-
 ## Problemas encontrados al levantarlo
-
-Sirven para la sección 7 de la entrega.
 
 **1. `zabbix-server` en bucle de reinicios.** `RestartCount=10`, `ExitCode=1`, y el log
 repetía `su-exec: : No such file or directory` con el nombre del programa vacío.
@@ -587,8 +520,6 @@ horario. **Resuelto**: la comprobación consulta en ciclo hasta 40 s y corta ape
 la línea. Y quedó más exigente: marca cada petición con una cadena única, así sólo pasa si
 una línea **nueva** recorrió toda la cadena; antes podía pasar encontrando una vieja.
 
-La lección vale para la defensa: **una prueba con una espera fija no distingue "roto" de
-"lento"**, y una prueba que falla a veces hace perder más tiempo que una que no existe.
 
 ## Si algo falla
 
@@ -605,6 +536,3 @@ Reiniciar todo desde cero, **borrando los datos de Zabbix, Grafana y Loki**:
 docker compose down -v
 docker compose up -d --build
 ```
-
-Los problemas reales que resuelvas pueden servir para la sección 7 de la entrega, que
-vale 4 puntos.
