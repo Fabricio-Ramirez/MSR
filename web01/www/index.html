@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tienda online</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --card: #181b22;
+    --line: #272b35;
+    --text: #e7e9ee;
+    --muted: #949cad;
+    --accent: #4f8cff;
+    --ok: #3fb950;
+    --warn: #e3b341;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    display: flex; align-items: center; gap: 16px;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; background: var(--bg); z-index: 5;
+  }
+  .logo { font-weight: 700; font-size: 20px; cursor: pointer; user-select: none; }
+  .logo span { color: var(--accent); }
+  .spacer { flex: 1; }
+  .cart {
+    border: 1px solid var(--line); border-radius: 8px;
+    padding: 8px 14px; font-variant-numeric: tabular-nums;
+  }
+  .cart b { color: var(--accent); }
+  main { max-width: 1000px; margin: 0 auto; padding: 32px 24px 64px; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  .lead { color: var(--muted); margin: 0 0 32px; }
+  .grid {
+    display: grid; gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  }
+  .prod {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 12px; padding: 18px; display: flex; flex-direction: column;
+  }
+  .prod .emoji { font-size: 40px; }
+  .prod h2 { font-size: 16px; margin: 12px 0 4px; }
+  .prod .price { color: var(--muted); font-size: 14px; margin-bottom: 14px; }
+  button {
+    font: inherit; cursor: pointer; border-radius: 8px;
+    border: 1px solid var(--accent); background: transparent;
+    color: var(--accent); padding: 8px 12px; margin-top: auto;
+  }
+  button:hover { background: var(--accent); color: #fff; }
+  footer {
+    border-top: 1px solid var(--line); padding: 20px 24px;
+    color: var(--muted); font-size: 13px; text-align: center;
+  }
+  /* ---------- panel tecnico (easter egg) ---------- */
+  #panel {
+    position: fixed; inset: 0; display: none; place-items: center;
+    background: rgba(0,0,0,.72); z-index: 50; padding: 24px;
+  }
+  #panel.on { display: grid; }
+  .box {
+    background: var(--card); border: 1px solid var(--accent);
+    border-radius: 14px; padding: 28px; max-width: 520px; width: 100%;
+  }
+  .box h2 { margin: 0 0 6px; font-size: 20px; }
+  .box p { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+  .row a {
+    color: var(--accent); text-decoration: none; font-size: 14px;
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px;
+  }
+  .row a:hover { border-color: var(--accent); }
+  .danger { border-color: var(--warn); color: var(--warn); }
+  .danger:hover { background: var(--warn); color: #000; }
+  .box h3 {
+    font-size: 13px; margin: 20px 0 10px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .06em;
+  }
+  .row button { margin-top: 0; }
+  #estado {
+    border-top: 1px solid var(--line); margin-top: 18px; padding-top: 12px;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 13px; color: var(--muted);
+  }
+  #log {
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px;
+    color: var(--ok); min-height: 20px; margin-top: 8px;
+  }
+  .close { float: right; border-color: var(--line); color: var(--muted); margin: 0; }
+  kbd {
+    background: #000; border: 1px solid var(--line); border-radius: 4px;
+    padding: 1px 5px; font-size: 12px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo" id="logo">Tienda<span>.online</span></div>
+  <div class="spacer"></div>
+  <div class="cart">Carrito: <b id="n">0</b></div>
+</header>
+
+<main>
+  <h1>Catálogo</h1>
+  <p class="lead">Servidor web del laboratorio de Monitoreo y Supervisión de Redes.</p>
+
+  <div class="grid" id="grid"></div>
+</main>
+
+<footer>
+  web01 &middot; Nginx &middot; laboratorio MSR &mdash; Universidad ORT Uruguay
+</footer>
+
+<div id="panel">
+  <div class="box">
+    <button class="close" onclick="cerrar()">cerrar</button>
+    <h2>Modo técnico</h2>
+    <p>Panel oculto del laboratorio. Los enlaces usan el reenvío de puertos de VirtualBox.</p>
+
+    <div class="row">
+      <a href="http://localhost:8443/" target="_blank" rel="noopener">Zabbix</a>
+      <a href="http://localhost:3000/" target="_blank" rel="noopener">Grafana</a>
+      <a href="/error500" target="_blank" rel="noopener">Probar un 500</a>
+    </div>
+
+    <h3>Pruebas de carga</h3>
+    <div class="row">
+      <button onclick="carga('cpu')">CPU 95% &middot; 10 min</button>
+      <button onclick="carga('ram')">RAM 92% &middot; 10 min</button>
+      <button onclick="carga('disco')">Disco 85%</button>
+    </div>
+    <div class="row">
+      <button onclick="carga('limpiar')">Limpiar disco</button>
+      <button class="danger" onclick="carga('stop')">Detener</button>
+      <button class="danger" onclick="generar(50)">50 errores 500 (P6)</button>
+    </div>
+
+    <div id="estado">&mdash;</div>
+    <div id="log"></div>
+  </div>
+</div>
+
+<script>
+const PRODUCTOS = [
+  { e: "🎧", n: "Auriculares", p: 1890 },
+  { e: "⌨️", n: "Teclado mecánico", p: 3250 },
+  { e: "🖱️", n: "Mouse inalámbrico", p: 990 },
+  { e: "🖥️", n: "Monitor 27\"", p: 12400 },
+  { e: "🪑", n: "Silla ergonómica", p: 18700 },
+  { e: "☕", n: "Taza ORT", p: 390 },
+];
+
+let n = 0;
+try { n = parseInt(localStorage.getItem("carrito") || "0", 10) || 0; } catch (_) {}
+document.getElementById("n").textContent = n;
+
+const grid = document.getElementById("grid");
+for (const p of PRODUCTOS) {
+  const d = document.createElement("div");
+  d.className = "prod";
+  d.innerHTML = `<div class="emoji">${p.e}</div>
+                 <h2></h2>
+                 <div class="price">$ ${p.p.toLocaleString("es-UY")}</div>
+                 <button>Agregar al carrito</button>`;
+  d.querySelector("h2").textContent = p.n;
+  d.querySelector("button").onclick = () => {
+    n++;
+    document.getElementById("n").textContent = n;
+    try { localStorage.setItem("carrito", String(n)); } catch (_) {}
+  };
+  grid.appendChild(d);
+}
+
+// ---------- Easter egg ----------
+// Konami: arriba arriba abajo abajo izq der izq der B A
+// o diez clics en el logo, para poder abrirlo desde el celular.
+const KONAMI = ["ArrowUp","ArrowUp","ArrowDown","ArrowDown",
+                "ArrowLeft","ArrowRight","ArrowLeft","ArrowRight","b","a"];
+let pos = 0;
+
+addEventListener("keydown", (ev) => {
+  const k = ev.key.length === 1 ? ev.key.toLowerCase() : ev.key;
+  pos = (k === KONAMI[pos]) ? pos + 1 : (k === KONAMI[0] ? 1 : 0);
+  if (pos === KONAMI.length) { pos = 0; abrir(); }
+});
+
+let clics = 0, reloj = null;
+document.getElementById("logo").onclick = () => {
+  clearTimeout(reloj);
+  reloj = setTimeout(() => { clics = 0; }, 1500);
+  if (++clics >= 10) { clics = 0; abrir(); }
+};
+
+let timerEstado = null;
+
+function abrir() {
+  document.getElementById("panel").classList.add("on");
+  estado();
+  timerEstado = setInterval(estado, 5000);
+}
+function cerrar() {
+  document.getElementById("panel").classList.remove("on");
+  clearInterval(timerEstado);
+}
+addEventListener("keydown", (e) => { if (e.key === "Escape") cerrar(); });
+
+// ---------- Pruebas de carga (P1, P2 y P3) ----------
+// Cada botón manda una acción fija a /api/carga, que la ejecuta con stress-ng
+// dentro de web01. Equivale a correr scripts/pruebas.sh en la VM.
+async function carga(accion) {
+  const log = document.getElementById("log");
+  log.textContent = "Enviando...";
+  try {
+    const r = await fetch("/api/carga?a=" + encodeURIComponent(accion), { cache: "no-store" });
+    const j = await r.json();
+    log.textContent = j.ok ? j.msg : "Error: " + j.error;
+  } catch (_) {
+    log.textContent = "No se pudo contactar /api/carga (¿está fcgiwrap arriba?)";
+  }
+  estado();
+}
+
+async function estado() {
+  const el = document.getElementById("estado");
+  try {
+    const r = await fetch("/api/carga?a=estado", { cache: "no-store" });
+    const j = await r.json();
+    el.textContent = j.corriendo
+      ? `prueba ${j.prueba} corriendo hace ${j.segundos}s · disco ${j.disco}%`
+      : `sin pruebas en curso · disco ${j.disco}%`;
+  } catch (_) {
+    el.textContent = "estado no disponible";
+  }
+}
+
+async function generar(total) {
+  const log = document.getElementById("log");
+  for (let i = 1; i <= total; i++) {
+    log.textContent = `Generando errores 500... ${i}/${total}`;
+    try { await fetch("/error500", { cache: "no-store" }); } catch (_) {}
+  }
+  log.textContent = `Listo: ${total} respuestas 500. Mirá los logs en Grafana y las alarmas en Zabbix.`;
+}
+</script>
+
+</body>
+</html>

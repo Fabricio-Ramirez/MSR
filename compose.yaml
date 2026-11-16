@@ -1,0 +1,162 @@
+name: obligatorio-msr
+
+x-logs: &logs
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "2"
+
+# Una sola red plana, igual que la propuesta reducida (192.168.56.0/24).
+# El gateway es .254 (puente de Docker) y da salida a Internet para Telegram y SMTP.
+#
+# Las IP de los seis contenedores son fijas y son las de la documentacion:
+#   web01 .10 | zabbix-server .20 | zabbix-web .21 | zabbix-db .22 | grafana .23 | loki .24
+# Cada una va en su servicio, con ipv4_address. Docker las respeta en cada arranque y no
+# dependen del orden en que levanten los contenedores.
+#
+# El puente lleva nombre fijo (br-lab) en vez del br-<id> que Docker genera solo:
+# asi las reglas de iptables de scripts/acceso-lan.sh y los tcpdump de las evidencias
+# siguen valiendo aunque se recree la red.
+networks:
+  lab:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br-lab
+    ipam:
+      driver: default
+      config:
+        - subnet: 192.168.56.0/24
+          gateway: 192.168.56.254
+
+volumes:
+  zabbix_db:
+  loki_data:
+  grafana_data:
+
+services:
+  # ---------- Servidor web monitoreado ----------
+  web01:
+    <<: *logs
+    build: ./web01
+    container_name: web01
+    hostname: web01
+    restart: unless-stopped
+    init: true
+    cap_add: [NET_ADMIN, NET_RAW]   # NET_ADMIN: prueba P5b (bajar la interfaz)
+    oom_score_adj: 500
+    environment:
+      TZ: America/Montevideo
+      SNMP_AUTH: ${SNMP_AUTH:?falta ejecutar scripts/init.sh}
+      SNMP_PRIV: ${SNMP_PRIV:?falta ejecutar scripts/init.sh}
+    ports:
+      - "80:80"
+    volumes:
+      - ./secrets/web01.psk:/secrets/web01.psk:ro
+    networks:
+      lab: { ipv4_address: 192.168.56.10 }
+
+  # ---------- mon01: un contenedor por servicio ----------
+  zabbix-server:
+    <<: *logs
+    build: ./zabbix-server
+    container_name: zabbix-server
+    hostname: mon01
+    restart: unless-stopped
+    cap_add: [NET_RAW]              # NET_RAW: fping / ICMP hacia web01
+    oom_score_adj: -500
+    sysctls:
+      net.ipv4.ping_group_range: "0 2147483647"
+    depends_on:
+      zabbix-db:
+        condition: service_healthy
+    environment:
+      TZ: America/Montevideo
+      DB_SERVER_HOST: 192.168.56.22
+      POSTGRES_DB: zabbix
+      POSTGRES_USER: zabbix
+      POSTGRES_PASSWORD: ${ZABBIX_DB_PASSWORD:?falta ejecutar scripts/init.sh}
+    networks:
+      lab: { ipv4_address: 192.168.56.20 }
+
+  zabbix-web:
+    <<: *logs
+    image: zabbix/zabbix-web-nginx-pgsql:alpine-7.0-latest
+    container_name: zabbix-web
+    hostname: zabbix-web
+    restart: unless-stopped
+    depends_on:
+      zabbix-db:
+        condition: service_healthy
+    environment:
+      TZ: America/Montevideo
+      PHP_TZ: America/Montevideo
+      ZBX_SERVER_HOST: 192.168.56.20
+      ZBX_SERVER_NAME: mon01
+      DB_SERVER_HOST: 192.168.56.22
+      POSTGRES_DB: zabbix
+      POSTGRES_USER: zabbix
+      POSTGRES_PASSWORD: ${ZABBIX_DB_PASSWORD:?falta ejecutar scripts/init.sh}
+    ports:
+      - "8080:8080"
+    networks:
+      lab: { ipv4_address: 192.168.56.21 }
+
+  zabbix-db:
+    <<: *logs
+    image: postgres:16-alpine
+    container_name: zabbix-db
+    hostname: zabbix-db
+    restart: unless-stopped
+    oom_score_adj: -500
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - max_connections=100
+    environment:
+      TZ: America/Montevideo
+      POSTGRES_DB: zabbix
+      POSTGRES_USER: zabbix
+      POSTGRES_PASSWORD: ${ZABBIX_DB_PASSWORD:?falta ejecutar scripts/init.sh}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zabbix -d zabbix"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - zabbix_db:/var/lib/postgresql/data
+    networks:
+      lab: { ipv4_address: 192.168.56.22 }
+
+  grafana:
+    <<: *logs
+    build: ./grafana
+    container_name: grafana
+    hostname: grafana
+    restart: unless-stopped
+    depends_on: [loki]
+    environment:
+      TZ: America/Montevideo
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?falta ejecutar scripts/init.sh}
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      lab: { ipv4_address: 192.168.56.23 }
+
+  loki:
+    <<: *logs
+    image: grafana/loki:3.5.0
+    container_name: loki
+    hostname: loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/config.yml
+    volumes:
+      - ./loki/config.yml:/etc/loki/config.yml:ro
+      - loki_data:/loki
+    networks:
+      lab: { ipv4_address: 192.168.56.24 }

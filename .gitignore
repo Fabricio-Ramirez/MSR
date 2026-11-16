@@ -1,0 +1,11 @@
+# Claves generadas por scripts/init.sh. Nunca se suben.
+.env
+secrets/
+
+# Restos de editores y del sistema
+*.swp
+*~
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

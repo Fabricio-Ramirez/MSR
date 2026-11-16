@@ -1,0 +1,8 @@
+# Este equipo tiene core.autocrlf=true (lo pone el instalador de Git para Windows).
+# Sin este archivo, al clonar el repo en Windows los scripts quedan con finales de
+# línea CRLF, y al copiarlos a la VM el intérprete falla con "bad interpreter: ^M"
+# o, peor, el script corre a medias. Todo lo que se ejecuta en Linux va con LF.
+* text=auto eol=lf
+
+# La única excepción: este se ejecuta en Windows.
+*.ps1 text eol=crlf
