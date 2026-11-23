@@ -41,11 +41,11 @@ zabbix_export:
               value: contenedor
           triggers:
             - uuid: 38910e4ba1e14c1a92fcafee58a7d727
-              expression: 'min(/Contenedor web01 (cgroup v2)/contenedor[cpu.uso],5m)>{$CONTENEDOR.CPU.MAX}'
-              name: 'web01: CPU del contenedor alta (más de {$CONTENEDOR.CPU.MAX}% de su límite durante 5m)'
+              expression: 'avg(/Contenedor web01 (cgroup v2)/contenedor[cpu.uso],5m)>{$CONTENEDOR.CPU.MAX}'
+              name: 'web01: CPU del contenedor alta (más de {$CONTENEDOR.CPU.MAX}% de su límite en promedio durante 5m)'
               opdata: 'Uso: {ITEM.LASTVALUE1}'
               priority: WARNING
-              description: 'El servidor web está usando toda la CPU que tiene asignada. A diferencia del trigger de la VM, este identifica a web01 como el contenedor que consume.'
+              description: 'El servidor web está usando toda la CPU que tiene asignada. A diferencia del trigger de la VM, este identifica a web01 como el contenedor que consume. Usa avg y no min: en la VM de VirtualBox sobre Hyper-V hay pausas de unos segundos que bajan una muestra aislada por debajo del umbral, y con min una sola alcanza para que el trigger no dispare.'
               tags:
                 - tag: scope
                   value: performance

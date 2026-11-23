@@ -59,7 +59,7 @@ un error: ahora hay dos niveles, la VM y el servidor web, y se pueden comparar.
 
 | Ítem | Clave | Trigger |
 |---|---|---|
-| CPU usada, % del límite | `contenedor[cpu.uso]` | > 90 % durante 5 min (Warning) |
+| CPU usada, % del límite | `contenedor[cpu.uso]` | promedio > 90 % en 5 min (Warning) |
 | Memoria usada, % del límite | `contenedor[mem.pct]` | > 90 % durante 5 min (Average) |
 | Procesos matados por OOM | `contenedor[mem.oom]` | cualquier aumento (High) |
 | Disco `/datos`, % usado | `vfs.fs.size[/datos,pused]` | > 80 % Warning, > 90 % High |
