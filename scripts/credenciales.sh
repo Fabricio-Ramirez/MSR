@@ -48,6 +48,7 @@ estado_grafana() {
 
 hostonly=$(ip -4 -o addr show 2>/dev/null | awk '$4 ~ /^192\.168\.57\./ {split($4,a,"/"); print a[1]; exit}')
 psk=$(cat secrets/web01.psk 2>/dev/null || echo "(falta secrets/web01.psk)")
+psk_mon=$(cat secrets/mon-agent.psk 2>/dev/null || echo "(falta secrets/mon-agent.psk)")
 
 cat <<EOF
 
@@ -88,6 +89,22 @@ cat <<EOF
   POSTGRESQL  192.168.56.22:5432, base zabbix
               usuario:     zabbix
               contraseña:  $ZABBIX_DB_PASSWORD
+
+  LÍMITES     web01: ${WEB01_CPUS:-?} núcleos, ${WEB01_MEM:-?} de RAM (en .env)
+
+----------------------------------------------------------------
+  Para configurar el host mon-agent en Zabbix
+----------------------------------------------------------------
+
+  AGENTE      192.168.56.25:10050, cifrado PSK
+              identidad:   PSK-mon-agent
+              valor:       $psk_mon
+
+  POSTGRESQL  macros del template "PostgreSQL by Zabbix agent 2"
+              {\$PG.CONNSTRING.AGENT2}  tcp://192.168.56.22:5432
+              {\$PG.USER}               zbx_monitor
+              {\$PG.PASSWORD}           ${PG_MONITOR_PASSWORD:-(falta en .env)}
+              {\$PG.DATABASE}           zabbix
 
   Todo esto sale de .env y secrets/, que no se suben al repositorio.
   Para verlo de nuevo: sh scripts/credenciales.sh

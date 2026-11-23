@@ -10,14 +10,16 @@ Todo lo que hace falta está en esta carpeta, que es lo que se versiona:
 |---|---|
 | **`README.md`** | Qué es el proyecto, cómo está armado, cómo se accede y los problemas que aparecieron, con su causa raíz |
 | **`PUESTA-EN-MARCHA.md`** | El paso a paso de cero: crear la VM, la red de VirtualBox, instalar Docker, levantar el stack y abrir las IP de la documentación |
+| **`zabbix/README.md`** | Monitoreo por contenedor y monitoreo del propio monitoreo: templates para importar y configuración en Zabbix |
 
 ## Inicio rápido
 
 Con la VM y Docker ya preparados (pasos 1 a 4 de `PUESTA-EN-MARCHA.md`):
 
 ```bash
-git clone <url-del-repositorio> obligatorio-docker
+git clone https://github.com/Fabricio-Ramirez/MSR.git obligatorio-docker
 cd obligatorio-docker
+sudo sh scripts/disco-web01.sh    # una sola vez: disco propio de web01
 sh scripts/iniciar.sh
 ```
 
@@ -28,10 +30,11 @@ y contraseña.
 |---|---|
 | `sh scripts/iniciar.sh` | Todo: genera claves, construye, arranca, espera y muestra los accesos |
 | `sh scripts/credenciales.sh` | Vuelve a mostrar direcciones, usuarios y contraseñas, y dice si siguen vigentes |
-| `sh scripts/verificar.sh` | 34 comprobaciones del laboratorio completo |
+| `sh scripts/verificar.sh` | 46 comprobaciones del laboratorio completo |
 | `sh scripts/pruebas.sh <p1..p6>` | Las pruebas de carga de la propuesta |
+| `sudo sh scripts/disco-web01.sh` | Crea y monta el disco propio de `web01` (`/datos`). Una vez por VM |
 | `sudo sh scripts/puente-lab.sh` | Opcional: abre las IP `192.168.56.x` desde Windows (apartado 4) |
-| `sh scripts/init.sh` | Solo genera `.env` y la PSK; lo llama `iniciar.sh` |
+| `sh scripts/init.sh` | Solo genera `.env`, los límites de `web01` y las PSK; lo llama `iniciar.sh` |
 
 **Las contraseñas no están en el repositorio.** Se generan al azar en cada instalación y
 quedan en `.env` y `secrets/`, que figuran en `.gitignore`. Clonar el proyecto en otra
@@ -58,6 +61,8 @@ sin base de datos de la tienda y sin PC de usuarios.
   |     Zabbix agent 2 (PSK)      zabbix-db     .22
   |     snmpd v3 (authPriv)       grafana       .23  :3000
   |     Alloy                     loki          .24  :3100
+  |     límite CPU/RAM propio     mon-agent     .25  (socket de Docker)
+  |     /datos: disco propio
 ```
 
 `mon01` se reparte en contenedores, uno por servicio; `zabbix-server` conserva la IP
@@ -77,8 +82,9 @@ al recrear los contenedores.
 | `zabbix-db` | `192.168.56.22` |
 | `grafana` | `192.168.56.23` |
 | `loki` | `192.168.56.24` |
+| `mon-agent` | `192.168.56.25` |
 
-`scripts/verificar.sh` comprueba las seis contra esta tabla: si alguna no coincide,
+`scripts/verificar.sh` comprueba las siete contra esta tabla: si alguna no coincide,
 el escenario web, la interfaz SNMP y las fuentes de datos de Grafana quedan apuntando al
 lugar equivocado, y es mejor enterarse ahí que tres pantallas después.
 
@@ -88,9 +94,10 @@ genera solo. Sirve para los `tcpdump` de la evidencia de SNMPv3 y para las regla
 
 | Contenedor | Contenido |
 |---|---|
-| `web01` | Nginx, Zabbix agent 2 con TLS-PSK, `snmpd` v3 authPriv, Alloy, `stress-ng` |
+| `web01` | Nginx, Zabbix agent 2 con TLS-PSK, `snmpd` v3 authPriv, Alloy, `stress-ng`. Con límite propio de CPU y RAM y un disco propio en `/datos` |
 | `zabbix-server`, `zabbix-web`, `zabbix-db` | Zabbix 7.0 y su base PostgreSQL |
 | `grafana`, `loki` | Consulta y almacenamiento de logs |
+| `mon-agent` | Zabbix agent 2 de infraestructura: lee el socket de Docker (template Docker) y monitorea PostgreSQL. Es el único con acceso al socket |
 
 ## 1. Crear la VM en VirtualBox
 
@@ -204,7 +211,7 @@ cd ~/obligatorio-docker
 sh scripts/iniciar.sh
 ```
 
-`iniciar.sh` genera las claves si faltan, construye y arranca los seis contenedores, espera
+`iniciar.sh` genera las claves si faltan, construye y arranca los siete contenedores, espera
 a que Zabbix y Grafana respondan y **muestra por pantalla la dirección, el usuario y la
 contraseña de cada servicio**. Es idempotente. Dos minutos después, la comprobación:
 
@@ -236,7 +243,7 @@ Sin TLS no hay advertencias del navegador ni certificados que importar.
 > **Es un paso manual y opcional, fuera del despliegue.** No lo hace `docker compose up` ni
 > `scripts/init.sh`: toca la configuración de VirtualBox y la red de la VM, así que pide
 > **la VM apagada**, **PowerShell como administrador** y **contraseña de `sudo`**. Sin él el
-> laboratorio funciona entero y las 34 comprobaciones de `verificar.sh` pasan igual; lo
+> laboratorio funciona entero y las comprobaciones de `verificar.sh` pasan igual; lo
 > único que agrega es poder abrir esas IP **desde el navegador de Windows**.
 >
 > **Aplicado y verificado el 16/11/2026** con la opción A. Las seis direcciones responden
@@ -258,7 +265,7 @@ Hay dos formas de resolverlo y **se excluyen entre sí**. La recomendada es la p
 En vez de enrutar desde Windows hacia la red de Docker, se pone a Windows **adentro** de
 esa red. Se le agrega a la VM un tercer adaptador, en host-only, y ese adaptador pasa a ser
 un puerto más del puente `br-lab`, igual que los `veth` de los contenedores. Windows queda
-en `192.168.56.1`, en el mismo segmento de capa 2 que los seis contenedores.
+en `192.168.56.1`, en el mismo segmento de capa 2 que los siete contenedores.
 
 ```text
   Windows  192.168.56.1  (adaptador host-only #2)
@@ -293,7 +300,7 @@ VBoxManage modifyvm "OBG-Monitoreo" --nicpromisc3 allow-all
 Tres detalles que no son opcionales:
 
 - **El DHCP de VirtualBox tiene que quedar deshabilitado** en ese adaptador. Si reparte
-  direcciones en `192.168.56.0/24` puede pisar las seis IP fijas. Si el comando dice que no
+  direcciones en `192.168.56.0/24` puede pisar las IP fijas. Si el comando dice que no
   existe ese servidor DHCP, mejor: no hay nada que deshabilitar.
 - **`--nicpromisc3 allow-all` es obligatorio.** Las tramas que vuelven de los contenedores
   llevan la MAC del contenedor, no la de la NIC de la VM; sin modo promiscuo VirtualBox las
@@ -387,6 +394,11 @@ la fuente Zabbix con URL `http://192.168.56.21:8080/api_jsonrpc.php` y un token 
 > decir que funciona aunque tu navegador no llegue a `192.168.56.0/24`. Si corriste
 > `scripts/acceso-lan.sh` y la ruta de Windows, además la podés abrir vos para comprobarla.
 
+**Monitoreo por contenedor y del propio monitoreo.** Después de lo anterior, seguí
+`zabbix/README.md`: template del contenedor para `web01`, host `mon-agent` con Docker y
+PostgreSQL, salud de Zabbix server, heartbeat a Healthchecks.io y el ajuste de la acción de
+notificación para que incluya los hosts nuevos.
+
 **Falta implementar las notificaciones.** La letra pide: *"El sistema debe enviar
 notificaciones por algún medio frente a eventos anormales (vía mail, chat, una aplicación,
 etc.)"*. Hoy el proyecto no configura ni Telegram ni SMTP; `verificar.sh` solo comprueba
@@ -406,12 +418,19 @@ scripts/pruebas.sh p4     # carga HTTP, desde la VM
 
 Cada prueba imprime la hora de inicio y de fin para completar la tabla 7.
 
+**CPU, RAM y disco se miden sobre `web01`, no sobre la VM.** `p1` y `p2` llevan a `web01`
+al tope de su límite (`WEB01_CPUS`, `WEB01_MEM` en `.env`) y disparan los triggers del
+template *Contenedor web01 (cgroup v2)*; los de la VM probablemente ya no, porque se le
+reservó margen al resto del laboratorio. `p3` llena `/datos`, el disco propio de `web01`, y
+no el de la VM. `p2` calcula los bytes a reservar con el cgroup: con `--vm-bytes 92%`
+`stress-ng` tomaría la memoria de la VM y el kernel lo mataría por OOM.
+
 ## Diferencias con la propuesta
 
 | Propuesta | Esta implementación | Consecuencia |
 |---|---|---|
 | `web01` y `mon01` son VM separadas | Contenedores en una sola VM | Si la VM cae, cae todo; esto debilita el argumento de separación de funciones |
-| CPU, RAM y disco de `web01` | El agente lee los valores **de toda la VM** | `stress-ng` también afecta a Zabbix y las métricas incluyen a todos los contenedores |
+| CPU, RAM y disco de `web01` | Los templates de Linux leen **toda la VM**; el template *Contenedor web01 (cgroup v2)* lee el contenedor, con límites propios y disco `/datos` aparte | Hay dos niveles, VM y servidor web. Ver `zabbix/README.md` |
 | La carga HTTP sale del host Windows | Sale de la VM, con `ab` | La VM comparte CPU con todo el laboratorio; anotalo al analizar P4 |
 | `systemctl stop nginx` | `supervisorctl stop nginx` (`pruebas.sh p5a`) | Sin efecto en lo que se mide |
 | `chrony` en cada equipo | `chrony` solo en la VM | Los contenedores usan el reloj de la VM |

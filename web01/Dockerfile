@@ -22,7 +22,9 @@ RUN apt-get update \
 
 COPY www/ /var/www/tienda/
 COPY cgi-bin/carga.sh /usr/lib/cgi-bin/carga.sh
-RUN chmod +x /usr/lib/cgi-bin/carga.sh
+# Métricas del propio contenedor desde su cgroup (UserParameter contenedor[*]).
+COPY zabbix/contenedor-metricas.sh /usr/local/bin/contenedor-metricas.sh
+RUN chmod +x /usr/lib/cgi-bin/carga.sh /usr/local/bin/contenedor-metricas.sh
 
 COPY nginx/logformat.conf /etc/nginx/conf.d/logformat.conf
 COPY nginx/tienda.conf /etc/nginx/sites-enabled/tienda

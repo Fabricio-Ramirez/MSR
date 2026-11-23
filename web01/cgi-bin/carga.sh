@@ -8,7 +8,10 @@
 set -u
 
 ESTADO=/tmp/carga.estado
-RELLENO=/var/tmp/carga-web.img
+# El relleno va en /datos, el disco propio de web01 (scripts/disco-web01.sh): así la
+# prueba llena el disco del servidor web y no el de la VM, donde vive Zabbix.
+DISCO=/datos
+RELLENO=$DISCO/relleno/carga-web.img
 # 10 minutos, igual que P1 y P2 de la propuesta. No bajar de esto: los triggers de CPU
 # y RAM usan min(...,5m), o sea que exigen 5 minutos sostenidos por encima del umbral;
 # con una carga de 5 minutos justos el trigger dispara al borde o no dispara.
@@ -30,7 +33,7 @@ lanzar() { # etiqueta comando...
 }
 
 uso_disco() {
-  df --output=pcent / | tail -1 | tr -dc '0-9'
+  df --output=pcent "$DISCO" | tail -1 | tr -dc '0-9'
 }
 
 case "${QUERY_STRING:-}" in
@@ -48,8 +51,12 @@ case "${QUERY_STRING:-}" in
     if corriendo; then
       responder '{"ok":false,"error":"Ya hay una prueba corriendo"}'
     else
-      lanzar ram stress-ng --vm 1 --vm-bytes 92% --vm-keep --timeout "${DURACION}s"
-      responder '{"ok":true,"msg":"RAM al 92% durante 10 minutos"}'
+      # "--vm-bytes 92%" no sirve: stress-ng lo calcula sobre /proc/meminfo, que muestra
+      # la memoria de la VM, y con el límite del contenedor el kernel lo mataría por OOM.
+      # Se reserva lo que falta para llegar al 92 % del límite del cgroup.
+      bytes=$(/usr/local/bin/contenedor-metricas.sh bytes-para 92)
+      lanzar ram stress-ng --vm 1 --vm-bytes "$bytes" --vm-keep --timeout "${DURACION}s"
+      responder '{"ok":true,"msg":"RAM al 92% del límite de web01 durante 10 minutos"}'
     fi
     ;;
 
@@ -57,8 +64,8 @@ case "${QUERY_STRING:-}" in
     if [ -f "$RELLENO" ]; then
       responder '{"ok":false,"error":"El relleno ya existe: usá Limpiar disco"}'
     else
-      total=$(df -B1 --output=size / | tail -1 | tr -dc '0-9')
-      usado=$(df -B1 --output=used / | tail -1 | tr -dc '0-9')
+      total=$(df -B1 --output=size "$DISCO" | tail -1 | tr -dc '0-9')
+      usado=$(df -B1 --output=used "$DISCO" | tail -1 | tr -dc '0-9')
       falta=$(( total / 100 * OBJETIVO_DISCO - usado ))
       if [ "$falta" -le 0 ]; then
         responder '{"ok":false,"error":"El disco ya supera el 85%"}'

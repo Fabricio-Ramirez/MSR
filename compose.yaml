@@ -10,8 +10,9 @@ x-logs: &logs
 # Una sola red plana, igual que la propuesta reducida (192.168.56.0/24).
 # El gateway es .254 (puente de Docker) y da salida a Internet para Telegram y SMTP.
 #
-# Las IP de los seis contenedores son fijas y son las de la documentacion:
+# Las IP de los siete contenedores son fijas y son las de la documentacion:
 #   web01 .10 | zabbix-server .20 | zabbix-web .21 | zabbix-db .22 | grafana .23 | loki .24
+#   mon-agent .25
 # Cada una va en su servicio, con ipv4_address. Docker las respeta en cada arranque y no
 # dependen del orden en que levanten los contenedores.
 #
@@ -45,6 +46,13 @@ services:
     init: true
     cap_add: [NET_ADMIN, NET_RAW]   # NET_ADMIN: prueba P5b (bajar la interfaz)
     oom_score_adj: 500
+    # Límites propios: la CPU y la RAM de web01 se miden contra esta cuota (template
+    # "Contenedor web01 (cgroup v2)") y una prueba de carga no puede ahogar a Zabbix.
+    # Los valores los calcula init.sh según la VM; se ajustan en .env.
+    # memswap_limit igual a mem_limit: sin swap, así la prueba de RAM mide RAM.
+    cpus: ${WEB01_CPUS:?falta ejecutar scripts/init.sh}
+    mem_limit: ${WEB01_MEM:?falta ejecutar scripts/init.sh}
+    memswap_limit: ${WEB01_MEM:?falta ejecutar scripts/init.sh}
     environment:
       TZ: America/Montevideo
       SNMP_AUTH: ${SNMP_AUTH:?falta ejecutar scripts/init.sh}
@@ -53,8 +61,38 @@ services:
       - "80:80"
     volumes:
       - ./secrets/web01.psk:/secrets/web01.psk:ro
+      # Disco propio de web01 (sudo sh scripts/disco-web01.sh). Si no se creó, Docker
+      # crea una carpeta común en el disco de la VM y verificar.sh lo marca.
+      - /srv/msr/web01-datos:/datos
     networks:
       lab: { ipv4_address: 192.168.56.10 }
+
+  # ---------- Agente de infraestructura: contenedores y PostgreSQL ----------
+  # Es el ÚNICO contenedor con acceso al socket de Docker. Quien habla con el socket
+  # controla Docker entero, o sea la VM: por eso no va en web01, que está expuesto y
+  # tiene un CGI. Este no publica puertos, solo atiende a zabbix-server con TLS-PSK y
+  # el agente 2 no permite system.run. El ":ro" NO limita la API (solo impide tocar el
+  # archivo del socket); se deja igual, pero no es una medida de seguridad.
+  mon-agent:
+    <<: *logs
+    image: zabbix/zabbix-agent2:alpine-7.0-latest
+    container_name: mon-agent
+    hostname: mon-agent
+    restart: unless-stopped
+    group_add: ["${DOCKER_GID:?falta ejecutar scripts/init.sh}"]
+    environment:
+      TZ: America/Montevideo
+      ZBX_HOSTNAME: mon-agent
+      ZBX_SERVER_HOST: 192.168.56.20
+      ZBX_TLSCONNECT: psk
+      ZBX_TLSACCEPT: psk
+      ZBX_TLSPSKIDENTITY: PSK-mon-agent
+      ZBX_TLSPSKFILE: /var/lib/zabbix/enc/mon-agent.psk
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./secrets/mon-agent.psk:/var/lib/zabbix/enc/mon-agent.psk:ro
+    networks:
+      lab: { ipv4_address: 192.168.56.25 }
 
   # ---------- mon01: un contenedor por servicio ----------
   zabbix-server:

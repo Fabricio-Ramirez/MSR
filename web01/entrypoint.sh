@@ -7,7 +7,9 @@ mkdir -p /run/zabbix /var/log/zabbix
 chown zabbix:zabbix /run/zabbix /var/log/zabbix
 
 CONF=/etc/zabbix/zabbix_agent2.conf
-sed -i -E '/^(Server|ServerActive|Hostname|TLSConnect|TLSAccept|TLSPSKIdentity|TLSPSKFile)=/d' "$CONF"
+# UserParameter también se borra antes de agregarlo: este bloque corre en cada
+# arranque, y una clave repetida hace que el agente 2 no arranque.
+sed -i -E '/^(Server|ServerActive|Hostname|TLSConnect|TLSAccept|TLSPSKIdentity|TLSPSKFile|UserParameter)=/d' "$CONF"
 cat >> "$CONF" <<'EOF'
 Server=192.168.56.20
 ServerActive=192.168.56.20
@@ -16,6 +18,9 @@ TLSConnect=psk
 TLSAccept=psk
 TLSPSKIdentity=PSK-web01
 TLSPSKFile=/etc/zabbix/web01.psk
+# Métricas del contenedor (cgroup v2), no de la VM. Ver contenedor-metricas.sh y
+# el template zabbix/template-contenedor-web01.yaml.
+UserParameter=contenedor[*],/usr/local/bin/contenedor-metricas.sh "$1"
 EOF
 
 # ---------- SNMPv3 authPriv, sin comunidades v1/v2c ----------
@@ -42,6 +47,13 @@ rouser zbxv3 priv
 sysLocation Laboratorio MSR - Tienda online
 sysContact soporte@tienda.local
 EOF
+
+# ---------- /datos: disco propio de web01 ----------
+# /datos es un filesystem aparte (scripts/disco-web01.sh) montado desde la VM. Ahí
+# escriben las pruebas de disco, así que llenarlo no llena el disco de la VM ni
+# afecta a Zabbix. El panel de la tienda corre como www-data y necesita escribir.
+mkdir -p /datos/relleno
+chown www-data:www-data /datos/relleno
 
 # ---------- Grafana Alloy ----------
 mkdir -p /var/lib/alloy/data

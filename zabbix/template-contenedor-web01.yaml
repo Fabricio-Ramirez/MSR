@@ -1,0 +1,224 @@
+zabbix_export:
+  version: '7.0'
+  template_groups:
+    - uuid: a571c0d144b14fd4a87a9d9b2aa9fcd6
+      name: Templates/Applications
+  templates:
+    - uuid: f1647621e22047bb906eba6125f1e118
+      template: 'Contenedor web01 (cgroup v2)'
+      name: 'Contenedor web01 (cgroup v2)'
+      description: |
+        CPU, memoria, E/S y disco del PROPIO contenedor web01, no de la VM.
+
+        Los templates de Linux leen /proc/stat y /proc/meminfo, que dentro de un contenedor
+        muestran la VM entera. Este template usa el cgroup v2 del contenedor (la misma
+        fuente que docker stats) mediante el UserParameter contenedor[*] que agrega
+        web01/entrypoint.sh, y el filesystem propio /datos (scripts/disco-web01.sh).
+
+        CPU y memoria se expresan como porcentaje del LÍMITE del contenedor
+        (cpus y mem_limit de compose.yaml). Se vincula al host web01, junto a los
+        templates de Linux, que siguen midiendo la VM.
+      groups:
+        - name: Templates/Applications
+      items:
+        - uuid: 8a51e89ce37d4ff1b3a035c6427914d8
+          name: 'Contenedor: CPU usada (% del límite)'
+          key: 'contenedor[cpu.uso]'
+          value_type: FLOAT
+          units: '%'
+          description: 'Microsegundos de CPU del cgroup divididos por los núcleos del límite. Change per second y x0.0001 lo pasan a % del límite.'
+          preprocessing:
+            - type: CHANGE_PER_SECOND
+              parameters:
+                - ''
+            - type: MULTIPLIER
+              parameters:
+                - '0.0001'
+          tags:
+            - tag: component
+              value: cpu
+            - tag: scope
+              value: contenedor
+          triggers:
+            - uuid: 38910e4ba1e14c1a92fcafee58a7d727
+              expression: 'min(/Contenedor web01 (cgroup v2)/contenedor[cpu.uso],5m)>{$CONTENEDOR.CPU.MAX}'
+              name: 'web01: CPU del contenedor alta (más de {$CONTENEDOR.CPU.MAX}% de su límite durante 5m)'
+              opdata: 'Uso: {ITEM.LASTVALUE1}'
+              priority: WARNING
+              description: 'El servidor web está usando toda la CPU que tiene asignada. A diferencia del trigger de la VM, este identifica a web01 como el contenedor que consume.'
+              tags:
+                - tag: scope
+                  value: performance
+        - uuid: 21fb9ee1bfe149368917bde8723f007e
+          name: 'Contenedor: límite de CPU (núcleos)'
+          key: 'contenedor[cpu.limite]'
+          delay: 10m
+          value_type: FLOAT
+          tags:
+            - tag: component
+              value: cpu
+            - tag: scope
+              value: contenedor
+        - uuid: 4601a7e07f854de7883835e2737d642f
+          name: 'Contenedor: CPU frenada por el límite (por segundo)'
+          key: 'contenedor[cpu.throttled]'
+          value_type: FLOAT
+          description: 'Períodos en que el kernel frenó a web01 por llegar a su cuota de CPU. Si sube, el contenedor necesita más CPU de la que tiene asignada.'
+          preprocessing:
+            - type: CHANGE_PER_SECOND
+              parameters:
+                - ''
+          tags:
+            - tag: component
+              value: cpu
+            - tag: scope
+              value: contenedor
+        - uuid: 6cd31214501345cb89c19aacce16bcad
+          name: 'Contenedor: memoria usada'
+          key: 'contenedor[mem.uso]'
+          units: B
+          description: 'memory.current menos la caché inactiva (inactive_file), igual que docker stats.'
+          tags:
+            - tag: component
+              value: memory
+            - tag: scope
+              value: contenedor
+        - uuid: fa82ca2231fe4bdeae69c126c49010ed
+          name: 'Contenedor: límite de memoria'
+          key: 'contenedor[mem.limite]'
+          delay: 10m
+          units: B
+          tags:
+            - tag: component
+              value: memory
+            - tag: scope
+              value: contenedor
+        - uuid: c597e660331b489280d9e70a447ba998
+          name: 'Contenedor: memoria usada (% del límite)'
+          key: 'contenedor[mem.pct]'
+          value_type: FLOAT
+          units: '%'
+          tags:
+            - tag: component
+              value: memory
+            - tag: scope
+              value: contenedor
+          triggers:
+            - uuid: 2f6c89c8cd5e48a7a1072f932268e833
+              expression: 'min(/Contenedor web01 (cgroup v2)/contenedor[mem.pct],5m)>{$CONTENEDOR.MEM.MAX}'
+              name: 'web01: memoria del contenedor alta (más de {$CONTENEDOR.MEM.MAX}% de su límite durante 5m)'
+              opdata: 'Uso: {ITEM.LASTVALUE1}'
+              priority: AVERAGE
+              description: 'Si sigue subiendo, el kernel va a matar procesos de web01 (OOM), empezando por el que más memoria use.'
+              tags:
+                - tag: scope
+                  value: capacity
+        - uuid: 359dff0fa53c4e939c2b2e081b12400e
+          name: 'Contenedor: procesos matados por falta de memoria (OOM)'
+          key: 'contenedor[mem.oom]'
+          description: 'Contador acumulado de memory.events oom_kill.'
+          tags:
+            - tag: component
+              value: memory
+            - tag: scope
+              value: contenedor
+          triggers:
+            - uuid: 147f883459fd43f098570a2ded38eb96
+              expression: 'change(/Contenedor web01 (cgroup v2)/contenedor[mem.oom])>0'
+              name: 'web01: el kernel mató un proceso por falta de memoria'
+              priority: HIGH
+              description: 'Un proceso de web01 llegó al límite de memoria y fue terminado. Puede ser Nginx: revisar el estado del servicio.'
+              manual_close: 'YES'
+              tags:
+                - tag: scope
+                  value: availability
+        - uuid: e8273f66e4874f1dabc3ccf942e53bc4
+          name: 'Contenedor: lectura de disco'
+          key: 'contenedor[io.lectura]'
+          value_type: FLOAT
+          units: Bps
+          preprocessing:
+            - type: CHANGE_PER_SECOND
+              parameters:
+                - ''
+          tags:
+            - tag: component
+              value: storage
+            - tag: scope
+              value: contenedor
+        - uuid: 8d9874fb5e2143d69be25a41b8f8a77f
+          name: 'Contenedor: escritura a disco'
+          key: 'contenedor[io.escritura]'
+          value_type: FLOAT
+          units: Bps
+          preprocessing:
+            - type: CHANGE_PER_SECOND
+              parameters:
+                - ''
+          tags:
+            - tag: component
+              value: storage
+            - tag: scope
+              value: contenedor
+        - uuid: 49ec75af11bb46559b88151215b50a84
+          name: 'Contenedor: cantidad de procesos'
+          key: 'contenedor[procesos]'
+          tags:
+            - tag: component
+              value: system
+            - tag: scope
+              value: contenedor
+        - uuid: 63fabec3d84f4fc2ba15d153e451c168
+          name: 'Disco de web01 (/datos): tamaño total'
+          key: 'vfs.fs.size[/datos,total]'
+          delay: 1h
+          units: B
+          tags:
+            - tag: component
+              value: storage
+            - tag: scope
+              value: contenedor
+        - uuid: 62fe01409ed94bed8f52625b040f511f
+          name: 'Disco de web01 (/datos): espacio usado (%)'
+          key: 'vfs.fs.size[/datos,pused]'
+          value_type: FLOAT
+          units: '%'
+          description: 'Filesystem propio de web01 (scripts/disco-web01.sh). El disco de la VM se sigue midiendo en "/" con el template de Linux.'
+          tags:
+            - tag: component
+              value: storage
+            - tag: scope
+              value: contenedor
+          triggers:
+            - uuid: c614cbb994144f32acf6ea75eef97d37
+              expression: 'last(/Contenedor web01 (cgroup v2)/vfs.fs.size[/datos,pused])>{$CONTENEDOR.DISCO.CRIT}'
+              name: 'web01: disco /datos casi lleno (más de {$CONTENEDOR.DISCO.CRIT}%)'
+              opdata: 'Usado: {ITEM.LASTVALUE1}'
+              priority: HIGH
+              tags:
+                - tag: scope
+                  value: capacity
+            - uuid: 78effa5bf07a41c896afa009fbdb2b20
+              expression: 'last(/Contenedor web01 (cgroup v2)/vfs.fs.size[/datos,pused])>{$CONTENEDOR.DISCO.WARN}'
+              name: 'web01: disco /datos con poco espacio (más de {$CONTENEDOR.DISCO.WARN}%)'
+              opdata: 'Usado: {ITEM.LASTVALUE1}'
+              priority: WARNING
+              dependencies:
+                - name: 'web01: disco /datos casi lleno (más de {$CONTENEDOR.DISCO.CRIT}%)'
+                  expression: 'last(/Contenedor web01 (cgroup v2)/vfs.fs.size[/datos,pused])>{$CONTENEDOR.DISCO.CRIT}'
+              tags:
+                - tag: scope
+                  value: capacity
+      macros:
+        - macro: '{$CONTENEDOR.CPU.MAX}'
+          value: '90'
+          description: 'Umbral de CPU de web01, en % de su límite.'
+        - macro: '{$CONTENEDOR.DISCO.CRIT}'
+          value: '90'
+          description: 'Umbral High del disco /datos.'
+        - macro: '{$CONTENEDOR.DISCO.WARN}'
+          value: '80'
+          description: 'Umbral Warning del disco /datos.'
+        - macro: '{$CONTENEDOR.MEM.MAX}'
+          value: '90'
+          description: 'Umbral de memoria de web01, en % de su límite.'

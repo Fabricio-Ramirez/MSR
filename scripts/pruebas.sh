@@ -2,21 +2,27 @@
 # Pruebas P1-P6 de la propuesta, adaptadas a contenedores.
 # La carga HTTP (P4 y P6) se lanza desde la VM, que cumple el papel del
 # "host Windows" de la propuesta. Requiere apache2-utils instalado en la VM.
+#
+# CPU y RAM se miden contra el LÍMITE de web01 (cpus y mem_limit de compose.yaml,
+# con los valores de .env), no contra la VM: los triggers que tienen que dispararse
+# son los del template "Contenedor web01 (cgroup v2)". El disco es /datos, el
+# filesystem propio de web01 que crea scripts/disco-web01.sh.
 set -eu
 
 WEB=192.168.56.10
 GW=192.168.56.254
+DISCO=/datos
 
 marca() { echo "[$(date '+%F %T')] $*"; }
 
 uso() {
   cat <<'EOF'
 Uso: scripts/pruebas.sh <prueba>
-  p1            CPU: 95 % durante 10 min
-  p2            RAM: 92 % durante 10 min
-  p3 <85|92>    Disco: llena hasta ese porcentaje
+  p1            CPU: 95 % del límite de web01 durante 10 min
+  p2            RAM: 92 % del límite de web01 durante 10 min
+  p3 <85|92>    Disco de web01 (/datos): llena hasta ese porcentaje
   p3-limpiar    Borra los archivos de relleno
-  p3b           E/S de disco durante 5 min
+  p3b           E/S de disco sobre /datos durante 5 min
   p4            Carga HTTP desde la VM (necesita apache2-utils)
   p5a           Detiene Nginx
   p5a-subir     Arranca Nginx
@@ -29,12 +35,18 @@ EOF
 case "${1:-}" in
   p1)
     marca "Inicio P1"
+    # --cpu 0 lanza un worker por núcleo de la VM; la cuota de cpus del contenedor los
+    # frena, así que web01 queda al tope de SU límite y la VM conserva margen.
     docker exec web01 stress-ng --cpu 0 --cpu-load 95 --timeout 10m --metrics-brief
     marca "Fin P1"
     ;;
   p2)
     marca "Inicio P2"
-    docker exec web01 stress-ng --vm 1 --vm-bytes 92% --vm-keep --timeout 10m
+    # No se usa "--vm-bytes 92%": stress-ng lo calcula sobre la memoria de la VM y,
+    # con el límite del contenedor, el kernel lo mataría por OOM al instante.
+    bytes=$(docker exec web01 /usr/local/bin/contenedor-metricas.sh bytes-para 92)
+    marca "Reservando $((bytes / 1048576)) MiB para llegar al 92 % del límite de web01"
+    docker exec web01 stress-ng --vm 1 --vm-bytes "$bytes" --vm-keep --timeout 10m
     marca "Fin P2"
     ;;
   p3)
@@ -42,20 +54,21 @@ case "${1:-}" in
     case "$obj" in 85|92) ;; *) echo "Solo se admite 85 o 92"; exit 1 ;; esac
     marca "Inicio P3 hasta $obj %"
     docker exec web01 sh -c '
-      set -- $(df -B1 --output=size,used / | tail -1)
+      set -- $(df -B1 --output=size,used '"$DISCO"' | tail -1)
       falta=$(( $1 / 100 * '"$obj"' - $2 ))
       if [ "$falta" -le 0 ]; then echo "El disco ya supera ese porcentaje"; exit 0; fi
-      fallocate -l "$falta" /var/tmp/relleno-'"$obj"'.img
-      df -h /'
+      fallocate -l "$falta" '"$DISCO"'/relleno/relleno-'"$obj"'.img
+      df -h '"$DISCO"
     marca "Disco en $obj %. Al terminar: scripts/pruebas.sh p3-limpiar"
     ;;
   p3-limpiar)
-    docker exec web01 sh -c 'rm -f /var/tmp/relleno-*.img; df -h /'
+    docker exec web01 sh -c "rm -f $DISCO/relleno/relleno-*.img; df -h $DISCO"
     marca "Relleno borrado"
     ;;
   p3b)
     marca "Inicio P3b"
-    docker exec web01 stress-ng --hdd 2 --hdd-bytes 1G --timeout 5m --temp-path /var/tmp
+    # 2 x 512 MB entran holgados en los 4 GB de /datos.
+    docker exec web01 stress-ng --hdd 2 --hdd-bytes 512M --timeout 5m --temp-path "$DISCO/relleno"
     marca "Fin P3b"
     ;;
   p4)

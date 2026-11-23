@@ -2,7 +2,7 @@
 
 ## Qué vas a levantar
 
-Una VM Ubuntu con seis contenedores Docker: el servidor web monitoreado (`web01`) y la pila de monitoreo (Zabbix server, frontend, PostgreSQL, Grafana y Loki). Es un solo comando una vez que la VM está lista.
+Una VM Ubuntu con siete contenedores Docker: el servidor web monitoreado (`web01`), la pila de monitoreo (Zabbix server, frontend, PostgreSQL, Grafana y Loki) y `mon-agent`, el agente que monitorea los contenedores y la base. Es un solo comando una vez que la VM está lista.
 
 Calculá **una hora** la primera vez. La construcción de las imágenes sola lleva unos 10 minutos.
 
@@ -135,14 +135,22 @@ scp -r "$HOME\Desktop\Monitoreo y Sup\Obligatorio\obligatorio-docker" monitoreo@
 
 Si ya había una copia vieja, borrala primero con `ssh monitoreo@192.168.57.10 "rm -rf ~/obligatorio-docker"`. El `scp -r` **fusiona** con lo que exista en vez de reemplazarlo, y te puede dejar archivos de versiones anteriores.
 
-Dentro de la VM, un solo comando levanta todo:
+Dentro de la VM, primero, **una sola vez por VM**, el disco propio de `web01`:
 
 ```
 cd ~/obligatorio-docker
+sudo sh scripts/disco-web01.sh
+```
+
+Crea un archivo imagen de 4 GB con un ext4 adentro, lo monta en `/srv/msr/web01-datos` y lo deja en `/etc/fstab`. `web01` lo ve como `/datos`, y ahí escriben las pruebas de disco: así llenan el disco del servidor web y no el de la VM, donde están PostgreSQL y Zabbix. Pide `sudo` porque toca `/etc/fstab`, y por eso no lo hace `iniciar.sh`. Si lo salteás el laboratorio anda igual, pero `/datos` queda en el disco de la VM y `verificar.sh` lo marca. Diagnóstico sin root: `sh scripts/disco-web01.sh --estado`.
+
+Después, un solo comando levanta todo:
+
+```
 sh scripts/iniciar.sh
 ```
 
-Hace tres cosas seguidas. Primero llama a `init.sh`, que genera `.env` con cuatro contraseñas aleatorias y la clave PSK del agente Zabbix; **no sobrescribe nada si ya existe**. Después corre `docker compose up -d --build`, que es lo que tarda: descarga tres imágenes y construye otras tres, unos 10 minutos y cerca de 5 GB la primera vez. Y al final espera a que Zabbix y Grafana respondan y **muestra por pantalla la dirección, el usuario y la contraseña de cada servicio**.
+Hace tres cosas seguidas. Primero llama a `init.sh`, que genera `.env` con las contraseñas aleatorias, los límites de CPU y RAM de `web01` (un núcleo y la mitad de la RAM quedan para el resto del laboratorio) y las claves PSK de los dos agentes Zabbix; **no sobrescribe nada si ya existe**, solo agrega lo que falte. Después corre `docker compose up -d --build`, que es lo que tarda: descarga tres imágenes y construye otras tres, unos 10 minutos y cerca de 5 GB la primera vez. Y al final espera a que Zabbix y Grafana respondan y **muestra por pantalla la dirección, el usuario y la contraseña de cada servicio**.
 
 Podés correrlo las veces que quieras: si todo ya está arriba no recrea nada. Y para volver a ver solo los accesos, sin tocar los contenedores:
 
@@ -164,7 +172,7 @@ Un solo comando te dice si quedó todo bien:
 sh scripts/verificar.sh
 ```
 
-Son **34 comprobaciones** y tienen que dar todas OK: los seis contenedores, sus seis IP fijas contra la tabla de la documentación, los cinco procesos dentro de `web01`, la conectividad entre ellos, SNMPv3 en sus dos caras (que v3 responda y que v2c sea rechazado) y la cadena de logs de punta a punta. Tarda un par de minutos porque algunas esperan.
+Son **46 comprobaciones** y tienen que dar todas OK: los siete contenedores, sus siete IP fijas contra la tabla de la documentación, los cinco procesos dentro de `web01`, la conectividad entre ellos, SNMPv3 en sus dos caras (que v3 responda y que v2c sea rechazado), la cadena de logs de punta a punta, los límites y el disco propio de `web01`, las métricas del contenedor, el acceso de `mon-agent` al socket de Docker y a PostgreSQL, y la salida a Healthchecks.io. Tarda un par de minutos porque algunas esperan.
 
 Si alguna falla, el nombre te dice cuál es y el apartado siguiente tiene los comandos para mirar.
 
@@ -188,7 +196,7 @@ Entrá a la tienda y probá el código Konami: ↑ ↑ ↓ ↓ ← → ← → B
 
 **Es un paso manual y opcional, fuera del despliegue.** No lo hace `docker compose up`:
 pide la VM apagada, una PowerShell como administrador y contraseña de `sudo`. Sin él el
-laboratorio funciona igual —las 34 comprobaciones de `verificar.sh` pasan—, pero conviene:
+laboratorio funciona igual —las comprobaciones de `verificar.sh` pasan—, pero conviene:
 deja las seis direcciones de la tabla —`192.168.56.10` web01, `.20` server, `.21` frontend,
 `.22` base, `.23` Grafana, `.24` Loki— accesibles tal cual desde el navegador de Windows, y
 las capturas quedan coincidiendo con lo que dice la propuesta.
@@ -277,6 +285,7 @@ El orden que conviene:
 2. **Crear el host `web01`** con la interfaz de agente y PSK, la interfaz SNMPv3, los templates y las macros.
 3. **Escenario web y triggers**, con las dependencias entre ellos.
 4. **Fuente de datos Zabbix en Grafana** y el dashboard de alarmas.
+4b. **Monitoreo por contenedor y del propio monitoreo**, siguiendo `zabbix/README.md`: template del contenedor en `web01`, host `mon-agent`, salud de Zabbix server, heartbeat y el ajuste de la acción de notificación.
 5. **Quince minutos de línea base** antes de cargar nada.
 6. **Las pruebas P1 a P6** con sus capturas.
 
