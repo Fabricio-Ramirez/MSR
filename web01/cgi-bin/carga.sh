@@ -42,7 +42,8 @@ case "${QUERY_STRING:-}" in
     if corriendo; then
       responder '{"ok":false,"error":"Ya hay una prueba corriendo"}'
     else
-      lanzar cpu stress-ng --cpu 0 --cpu-load 95 --timeout "${DURACION}s"
+      # int64: el método por defecto usa AVX, que la VM no expone (SIGILL).
+      lanzar cpu stress-ng --cpu 0 --cpu-method int64 --cpu-load 95 --timeout "${DURACION}s"
       responder '{"ok":true,"msg":"CPU al 95% durante 10 minutos"}'
     fi
     ;;

@@ -37,7 +37,10 @@ case "${1:-}" in
     marca "Inicio P1"
     # --cpu 0 lanza un worker por núcleo de la VM; la cuota de cpus del contenedor los
     # frena, así que web01 queda al tope de SU límite y la VM conserva margen.
-    docker exec web01 stress-ng --cpu 0 --cpu-load 95 --timeout 10m --metrics-brief
+    # --cpu-method int64: el método por defecto ("all") incluye instrucciones AVX que
+    # el CPU virtual de VirtualBox no expone; stress-ng moría con SIGILL en 0,01 s y
+    # la prueba "terminaba" sin haber cargado nada.
+    docker exec web01 stress-ng --cpu 0 --cpu-method int64 --cpu-load 95 --timeout 10m --metrics-brief
     marca "Fin P1"
     ;;
   p2)
