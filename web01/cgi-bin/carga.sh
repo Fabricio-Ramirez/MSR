@@ -26,6 +26,9 @@ corriendo() {
   pgrep -u "$(id -u)" -x stress-ng >/dev/null 2>&1
 }
 
+# --temp-path /tmp en cada stress-ng: el CGI corre como www-data con la carpeta actual
+# en /usr/lib/cgi-bin, que es de root, y stress-ng aborta si no puede escribir ahí
+# ("temp-path '.' must be readable and writeable"): el botón respondía OK sin cargar nada.
 lanzar() { # etiqueta comando...
   etiqueta=$1; shift
   printf '%s %s\n' "$etiqueta" "$(date +%s)" > "$ESTADO"
@@ -43,7 +46,7 @@ case "${QUERY_STRING:-}" in
       responder '{"ok":false,"error":"Ya hay una prueba corriendo"}'
     else
       # int64: el método por defecto usa AVX, que la VM no expone (SIGILL).
-      lanzar cpu stress-ng --cpu 0 --cpu-method int64 --cpu-load 95 --timeout "${DURACION}s"
+      lanzar cpu stress-ng --temp-path /tmp --cpu 0 --cpu-method int64 --cpu-load 95 --timeout "${DURACION}s"
       responder '{"ok":true,"msg":"CPU al 95% durante 10 minutos"}'
     fi
     ;;
@@ -56,7 +59,7 @@ case "${QUERY_STRING:-}" in
       # la memoria de la VM, y con el límite del contenedor el kernel lo mataría por OOM.
       # Se reserva lo que falta para llegar al 92 % del límite del cgroup.
       bytes=$(/usr/local/bin/contenedor-metricas.sh bytes-para 92)
-      lanzar ram stress-ng --vm 1 --vm-bytes "$bytes" --vm-keep --timeout "${DURACION}s"
+      lanzar ram stress-ng --temp-path /tmp --vm 1 --vm-bytes "$bytes" --vm-keep --timeout "${DURACION}s"
       responder '{"ok":true,"msg":"RAM al 92% del límite de web01 durante 10 minutos"}'
     fi
     ;;
