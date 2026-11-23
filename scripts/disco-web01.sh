@@ -32,7 +32,10 @@ estado() {
   if grep -q "^$IMAGEN " /etc/fstab 2>/dev/null; then echo "fstab:   entrada presente"
   else echo "fstab:   sin entrada"; fi
   if command -v docker >/dev/null 2>&1 && docker inspect web01 >/dev/null 2>&1; then
-    if docker exec web01 mountpoint -q /datos 2>/dev/null; then
+    # No alcanza con "mountpoint /datos" adentro: todo bind mount lo es. Se compara el
+    # tamaño del filesystem que ve web01 con el del disco montado en la VM.
+    if mountpoint -q "$PUNTO" 2>/dev/null &&
+       [ "$(docker exec web01 stat -f -c %b /datos 2>/dev/null)" = "$(stat -f -c %b "$PUNTO")" ]; then
       echo "web01:   /datos es un montaje propio"
     else
       echo "web01:   /datos NO es un montaje propio (reiniciá web01 después de montar)"

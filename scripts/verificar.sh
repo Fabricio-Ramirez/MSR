@@ -121,12 +121,20 @@ chequear "web01: agente lee CPU del contenedor" item_web01 'contenedor[cpu.uso]'
 chequear "web01: agente lee memoria del contenedor" item_web01 'contenedor[mem.pct]'
 # /datos tiene que ser un filesystem propio. Si scripts/disco-web01.sh no se corrió,
 # Docker crea una carpeta común en el disco de la VM y la prueba P3 vuelve a medir la VM.
-chequear "web01: /datos es un disco propio" docker exec web01 mountpoint -q /datos
+# "mountpoint /datos" dentro del contenedor NO sirve: cualquier bind mount es un punto de
+# montaje, aunque apunte a una carpeta común. Se mira en la VM y se compara el tamaño
+# del filesystem que ve web01 con el del disco montado (si web01 arrancó antes del
+# montaje, ve la carpeta de abajo y los tamaños no coinciden).
+disco_propio() {
+  mountpoint -q /srv/msr/web01-datos &&
+    [ "$(docker exec web01 stat -f -c %b /datos)" = "$(stat -f -c %b /srv/msr/web01-datos)" ]
+}
+chequear "web01: /datos es un disco propio" disco_propio
 chequear "web01: /datos/relleno escribible por www-data" docker exec -u www-data web01 test -w /datos/relleno
 
 # ---- monitoreo del monitoreo ----
-chequear "mon-agent: lee el socket de Docker" sh -c "docker exec mon-agent zabbix_agent2 -t docker.ping | grep -q '|1]'"
-chequear "mon-agent: PostgreSQL responde a zbx_monitor" sh -c "docker exec mon-agent zabbix_agent2 -t 'pgsql.ping[\"tcp://192.168.56.22:5432\",\"zbx_monitor\",\"$PG_MONITOR_PASSWORD\",\"zabbix\"]' | grep -q '|1]'"
+chequear "mon-agent: lee el socket de Docker" sh -c "docker exec mon-agent zabbix_agent2 -t docker.ping | grep -Eq '\|1(\.0+)?\]'"
+chequear "mon-agent: PostgreSQL responde a zbx_monitor" sh -c "docker exec mon-agent zabbix_agent2 -t 'pgsql.ping[\"tcp://192.168.56.22:5432\",\"zbx_monitor\",\"$PG_MONITOR_PASSWORD\",\"zabbix\"]' | grep -Eq '\|1(\.0+)?\]'"
 chequear "zabbix-server -> agente de mon-agent TCP 10050" docker exec zabbix-server nc -z -w 3 192.168.56.25 10050
 # Solo conectividad: no se pinguea la URL real del check para no falsear el heartbeat.
 chequear "zabbix-server -> Internet (Healthchecks.io)" docker exec zabbix-server curl -s -m 15 -o /dev/null https://hc-ping.com/
