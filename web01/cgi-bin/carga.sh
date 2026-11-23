@@ -59,7 +59,7 @@ case "${QUERY_STRING:-}" in
       # la memoria de la VM, y con el límite del contenedor el kernel lo mataría por OOM.
       # Se reserva lo que falta para llegar al 92 % del límite del cgroup.
       bytes=$(/usr/local/bin/contenedor-metricas.sh bytes-para 92)
-      lanzar ram stress-ng --temp-path /tmp --vm 1 --vm-bytes "$bytes" --vm-keep --timeout "${DURACION}s"
+      lanzar ram stress-ng --temp-path /tmp --vm 1 --vm-bytes "$bytes" --vm-method zero-one --vm-keep --timeout "${DURACION}s"
       responder '{"ok":true,"msg":"RAM al 92% del límite de web01 durante 10 minutos"}'
     fi
     ;;

@@ -49,7 +49,9 @@ case "${1:-}" in
     # con el límite del contenedor, el kernel lo mataría por OOM al instante.
     bytes=$(docker exec web01 /usr/local/bin/contenedor-metricas.sh bytes-para 92)
     marca "Reservando $((bytes / 1048576)) MiB para llegar al 92 % del límite de web01"
-    docker exec web01 stress-ng --vm 1 --vm-bytes "$bytes" --vm-keep --timeout 10m
+    # --vm-method zero-one: el método por defecto recorre variantes con AVX y muere con
+    # SIGILL en la VM de VirtualBox (igual que P1), liberando la memoria a mitad de prueba.
+    docker exec web01 stress-ng --vm 1 --vm-bytes "$bytes" --vm-method zero-one --vm-keep --timeout 10m
     marca "Fin P2"
     ;;
   p3)
