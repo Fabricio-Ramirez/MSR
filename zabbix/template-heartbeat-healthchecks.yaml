@@ -1,0 +1,47 @@
+zabbix_export:
+  version: '7.0'
+  template_groups:
+    - uuid: a571c0d144b14fd4a87a9d9b2aa9fcd6
+      name: Templates/Applications
+  templates:
+    - uuid: 044fdaf0af4a4b3fb4349d18bee711e0
+      template: 'Heartbeat Healthchecks.io'
+      name: 'Heartbeat Healthchecks.io'
+      description: |
+        Dead man's switch: el propio servidor Zabbix avisa cada minuto a Healthchecks.io.
+        Si Zabbix se cae, se traba o la VM se apaga, los avisos dejan de llegar y
+        Healthchecks.io alerta por su cuenta (mail / Telegram), sin pasar por Zabbix.
+
+        Se vincula al host "Zabbix server". La Ping URL va en la macro {$HC.PING.URL},
+        de tipo Secret text, cargada en el host: no se guarda en el repositorio.
+      groups:
+        - name: Templates/Applications
+      items:
+        - uuid: ccb83c603c67464cbafeb34df86ce3e8
+          name: 'Heartbeat a Healthchecks.io'
+          type: HTTP_AGENT
+          key: heartbeat.healthchecks
+          history: 1d
+          value_type: TEXT
+          trends: '0'
+          timeout: 10s
+          url: '{$HC.PING.URL}'
+          description: 'Lo ejecuta el poller HTTP del servidor Zabbix: si el servidor no procesa, no hay ping.'
+          tags:
+            - tag: component
+              value: health
+            - tag: scope
+              value: monitoreo
+          triggers:
+            - uuid: 7cae24b6b9ab40bd8488d48ff450355a
+              expression: 'nodata(/Heartbeat Healthchecks.io/heartbeat.healthchecks,5m)=1'
+              name: 'Zabbix: no se pudo avisar a Healthchecks.io en 5 minutos'
+              priority: WARNING
+              description: 'El servidor Zabbix funciona pero el heartbeat no sale (sin Internet, URL mal cargada o Healthchecks.io caído). Healthchecks.io va a avisar que Zabbix está caído aunque no lo esté.'
+              tags:
+                - tag: scope
+                  value: availability
+      macros:
+        - macro: '{$HC.PING.URL}'
+          type: SECRET_TEXT
+          description: 'Ping URL del check en Healthchecks.io (https://hc-ping.com/<uuid>). Cargarla en el host.'

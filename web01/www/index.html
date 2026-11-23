@@ -235,8 +235,8 @@ async function estado() {
     const r = await fetch("/api/carga?a=estado", { cache: "no-store" });
     const j = await r.json();
     el.textContent = j.corriendo
-      ? `prueba ${j.prueba} corriendo hace ${j.segundos}s · disco ${j.disco}%`
-      : `sin pruebas en curso · disco ${j.disco}%`;
+      ? `prueba ${j.prueba} corriendo hace ${j.segundos}s · disco web01 ${j.disco}%`
+      : `sin pruebas en curso · disco web01 ${j.disco}%`;
   } catch (_) {
     el.textContent = "estado no disponible";
   }
