@@ -27,12 +27,18 @@ agregar() { # NOMBRE valor
 }
 
 # Límites de web01. Con límites, la CPU y la RAM del servidor web se miden contra su
-# propia cuota (template "Contenedor web01") y una prueba de carga no puede dejar sin
+# propio límite (template "Contenedor web01") y una prueba de carga no puede dejar sin
 # recursos a Zabbix. Se le deja un núcleo y la mitad de la RAM al resto del laboratorio.
+# CPU con núcleos fijos (cpuset), no con cuota: ver el comentario en compose.yaml.
+# web01 recibe del núcleo 1 en adelante; el 0 queda para el resto.
 nucleos=$(nproc)
-[ "$nucleos" -gt 1 ] && nucleos=$((nucleos - 1))
+case "$nucleos" in
+  1) cpuset=0 ;;
+  2) cpuset=1 ;;
+  *) cpuset="1-$((nucleos - 1))" ;;
+esac
 memoria=$(awk '$1 == "MemTotal:" { printf "%dm", $2 / 1024 / 2 }' /proc/meminfo)
-agregar WEB01_CPUS "$nucleos"
+agregar WEB01_CPUSET "$cpuset"
 agregar WEB01_MEM "$memoria"
 
 # GID del grupo dueño del socket de Docker: mon-agent lo recibe con group_add para

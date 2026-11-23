@@ -16,7 +16,7 @@ zabbix_export:
         web01/entrypoint.sh, y el filesystem propio /datos (scripts/disco-web01.sh).
 
         CPU y memoria se expresan como porcentaje del LÍMITE del contenedor
-        (cpus y mem_limit de compose.yaml). Se vincula al host web01, junto a los
+        (cpuset y mem_limit de compose.yaml). Se vincula al host web01, junto a los
         templates de Linux, que siguen midiendo la VM.
       groups:
         - name: Templates/Applications
@@ -26,7 +26,7 @@ zabbix_export:
           key: 'contenedor[cpu.uso]'
           value_type: FLOAT
           units: '%'
-          description: 'Microsegundos de CPU del cgroup divididos por los núcleos del límite. Change per second y x0.0001 lo pasan a % del límite.'
+          description: 'Microsegundos de CPU del cgroup divididos por los núcleos asignados. Change per second y x0.0001 lo pasan a % del límite.'
           preprocessing:
             - type: CHANGE_PER_SECOND
               parameters:
@@ -63,7 +63,7 @@ zabbix_export:
           name: 'Contenedor: CPU frenada por el límite (por segundo)'
           key: 'contenedor[cpu.throttled]'
           value_type: FLOAT
-          description: 'Períodos en que el kernel frenó a web01 por llegar a su cuota de CPU. Si sube, el contenedor necesita más CPU de la que tiene asignada.'
+          description: 'Períodos en que el kernel frenó a web01 por llegar a su cuota de CPU. Con cpuset (la configuración del proyecto) queda en 0; sirve si se cambia a una cuota con cpus.'
           preprocessing:
             - type: CHANGE_PER_SECOND
               parameters:

@@ -3,7 +3,7 @@
 # La carga HTTP (P4 y P6) se lanza desde la VM, que cumple el papel del
 # "host Windows" de la propuesta. Requiere apache2-utils instalado en la VM.
 #
-# CPU y RAM se miden contra el LÍMITE de web01 (cpus y mem_limit de compose.yaml,
+# CPU y RAM se miden contra el LÍMITE de web01 (cpuset y mem_limit de compose.yaml,
 # con los valores de .env), no contra la VM: los triggers que tienen que dispararse
 # son los del template "Contenedor web01 (cgroup v2)". El disco es /datos, el
 # filesystem propio de web01 que crea scripts/disco-web01.sh.
@@ -35,8 +35,8 @@ EOF
 case "${1:-}" in
   p1)
     marca "Inicio P1"
-    # --cpu 0 lanza un worker por núcleo de la VM; la cuota de cpus del contenedor los
-    # frena, así que web01 queda al tope de SU límite y la VM conserva margen.
+    # --cpu 0 lanza un worker por núcleo de la VM, pero el cpuset de web01 los encierra
+    # en sus núcleos: web01 queda al tope de SU límite y la VM conserva margen.
     # --cpu-method int64: el método por defecto ("all") incluye instrucciones AVX que
     # el CPU virtual de VirtualBox no expone; stress-ng moría con SIGILL en 0,01 s y
     # la prueba "terminaba" sin haber cargado nada.

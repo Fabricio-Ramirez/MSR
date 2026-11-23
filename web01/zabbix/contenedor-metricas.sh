@@ -11,10 +11,10 @@
 # entrypoint.sh) y lo usan las pruebas de RAM (pruebas.sh p2 y el panel de la tienda)
 # para calcular cuánta memoria reservar sin pasarse del límite.
 #
-#   contenedor-metricas.sh cpu.uso        µs de CPU acumulados / núcleos del límite
+#   contenedor-metricas.sh cpu.uso        µs de CPU acumulados / núcleos asignados
 #                                         (en Zabbix: Change per second y x0.0001 = % del límite)
-#   contenedor-metricas.sh cpu.limite     núcleos asignados (cpus: de compose.yaml)
-#   contenedor-metricas.sh cpu.throttled  veces que el kernel frenó al contenedor por llegar al límite
+#   contenedor-metricas.sh cpu.limite     núcleos asignados (cpuset de compose.yaml, o cuota si la hay)
+#   contenedor-metricas.sh cpu.throttled  veces que el kernel frenó al contenedor por la cuota (0 con cpuset)
 #   contenedor-metricas.sh mem.uso        bytes en uso, sin la caché inactiva (igual que docker stats)
 #   contenedor-metricas.sh mem.limite     bytes del límite (mem_limit: de compose.yaml)
 #   contenedor-metricas.sh mem.pct        % de memoria usada respecto del límite
@@ -31,7 +31,13 @@ CG=/sys/fs/cgroup
 nucleos_limite() {
   read -r cuota periodo < "$CG/cpu.max"
   if [ "$cuota" = max ]; then
-    nproc
+    # Sin cuota: cuenta los núcleos del cpuset ("1", "1-3", "0,2-3").
+    if [ -r "$CG/cpuset.cpus.effective" ]; then
+      awk -F, '{ for (i = 1; i <= NF; i++) { n = split($i, r, "-"); t += (n == 2) ? r[2] - r[1] + 1 : 1 } }
+               END { print t }' "$CG/cpuset.cpus.effective"
+    else
+      nproc
+    fi
   else
     awk -v c="$cuota" -v p="$periodo" 'BEGIN { printf "%.2f\n", c / p }'
   fi

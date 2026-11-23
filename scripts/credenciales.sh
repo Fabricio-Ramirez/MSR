@@ -90,7 +90,7 @@ cat <<EOF
               usuario:     zabbix
               contraseña:  $ZABBIX_DB_PASSWORD
 
-  LÍMITES     web01: ${WEB01_CPUS:-?} núcleos, ${WEB01_MEM:-?} de RAM (en .env)
+  LÍMITES     web01: núcleos ${WEB01_CPUSET:-?}, ${WEB01_MEM:-?} de RAM (en .env)
 
 ----------------------------------------------------------------
   Para configurar el host mon-agent en Zabbix

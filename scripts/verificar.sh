@@ -115,7 +115,8 @@ chequear "Alloy envía logs a Loki" docker exec web01 sh -c "curl -s -m 10 http:
 item_web01() { # clave -> el agente de web01 la resuelve con un número
   docker exec web01 zabbix_agent2 -t "$1" 2>/dev/null | grep -Eq '\[[sdtu]\|[0-9.]+\]'
 }
-chequear "web01: límite de CPU aplicado" sh -c "docker exec web01 cat /sys/fs/cgroup/cpu.max | grep -vq '^max '"
+# CPU limitada con cpuset: web01 ve menos núcleos que la VM.
+chequear "web01: límite de CPU aplicado" sh -c '[ "$(docker exec web01 cat /sys/fs/cgroup/cpuset.cpus.effective)" != "$(cat /sys/fs/cgroup/cpuset.cpus.effective)" ]'
 chequear "web01: límite de memoria aplicado" sh -c "docker exec web01 cat /sys/fs/cgroup/memory.max | grep -vqx max"
 chequear "web01: agente lee CPU del contenedor" item_web01 'contenedor[cpu.uso]'
 chequear "web01: agente lee memoria del contenedor" item_web01 'contenedor[mem.pct]'

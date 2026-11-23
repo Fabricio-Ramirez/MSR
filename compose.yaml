@@ -46,11 +46,17 @@ services:
     init: true
     cap_add: [NET_ADMIN, NET_RAW]   # NET_ADMIN: prueba P5b (bajar la interfaz)
     oom_score_adj: 500
-    # Límites propios: la CPU y la RAM de web01 se miden contra esta cuota (template
+    # Límites propios: la CPU y la RAM de web01 se miden contra ellos (template
     # "Contenedor web01 (cgroup v2)") y una prueba de carga no puede ahogar a Zabbix.
     # Los valores los calcula init.sh según la VM; se ajustan en .env.
+    #
+    # CPU: cpuset (núcleos fijos) y NO "cpus:" (cuota). Con cuota, el kernel frena al
+    # contenedor cada 100 ms con temporizadores; en una VM de VirtualBox sin VT-x, que
+    # corre sobre Hyper-V (NEM), eso congelaba la VM entera durante P1: load de 63 y
+    # mediciones erráticas. Con cpuset, web01 queda estable al 94 % de su núcleo y el
+    # núcleo 0 queda libre para el resto del laboratorio. Medido en la VM.
     # memswap_limit igual a mem_limit: sin swap, así la prueba de RAM mide RAM.
-    cpus: ${WEB01_CPUS:?falta ejecutar scripts/init.sh}
+    cpuset: ${WEB01_CPUSET:?falta ejecutar scripts/init.sh}
     mem_limit: ${WEB01_MEM:?falta ejecutar scripts/init.sh}
     memswap_limit: ${WEB01_MEM:?falta ejecutar scripts/init.sh}
     environment:

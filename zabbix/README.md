@@ -28,7 +28,7 @@ Se ataca por cuatro lados, de lo más simple a lo más invasivo:
 | Mecanismo | Dónde | Qué aporta |
 |---|---|---|
 | Métricas del **cgroup** de `web01` | `web01/zabbix/contenedor-metricas.sh` + UserParameter `contenedor[*]` | CPU y RAM del contenedor, sin tocar el socket de Docker |
-| **Límites** de CPU y RAM | `compose.yaml` (`cpus`, `mem_limit`), valores en `.env` | Le dan al % un denominador; una prueba en `web01` ya no ahoga a Zabbix |
+| **Límites** de CPU y RAM | `compose.yaml` (`cpuset`, `mem_limit`), valores en `.env` | Le dan al % un denominador; una prueba en `web01` ya no ahoga a Zabbix |
 | **Disco propio** `/datos` | `scripts/disco-web01.sh` | La prueba de disco llena el disco de `web01`, no el de la VM |
 | **Template Docker** desde `mon-agent` | contenedor `mon-agent` con el socket de Docker | Ve los siete contenedores y detecta si alguno se cae |
 
@@ -43,7 +43,7 @@ un error: ahora hay dos niveles, la VM y el servidor web, y se pueden comparar.
 > laboratorio. Las capturas del informe hechas antes de este cambio muestran los triggers
 > de la VM: hay que repetirlas.
 >
-> Si querés volver a cargar la VM entera, subí `WEB01_CPUS` y `WEB01_MEM` en `.env` a lo
+> Si querés volver a cargar la VM entera, poné en `.env` `WEB01_CPUSET` con todos los núcleos (por ejemplo `0-1`) y subí `WEB01_MEM` a lo
 > que tenga la VM y hacé `docker compose up -d web01`.
 
 ## 1. Host `web01`: template del contenedor

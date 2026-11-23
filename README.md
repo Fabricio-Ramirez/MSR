@@ -424,7 +424,7 @@ scripts/pruebas.sh p4     # carga HTTP, desde la VM
 Cada prueba imprime la hora de inicio y de fin para completar la tabla 7.
 
 **CPU, RAM y disco se miden sobre `web01`, no sobre la VM.** `p1` y `p2` llevan a `web01`
-al tope de su límite (`WEB01_CPUS`, `WEB01_MEM` en `.env`) y disparan los triggers del
+al tope de su límite (`WEB01_CPUSET`, `WEB01_MEM` en `.env`) y disparan los triggers del
 template *Contenedor web01 (cgroup v2)*; los de la VM probablemente ya no, porque se le
 reservó margen al resto del laboratorio. `p3` llena `/datos`, el disco propio de `web01`, y
 no el de la VM. `p2` calcula los bytes a reservar con el cgroup: con `--vm-bytes 92%`
