@@ -196,6 +196,11 @@ scp -P 2223 -r "$HOME\Desktop\Monitoreo y Sup\Obligatorio\obligatorio-docker" mo
 El `rm -rf` importa: `scp -r` fusiona con lo que ya exista y, si copiaste la versión
 anterior, te dejaría las carpetas `router/` y `pc/` que este proyecto ya no usa.
 
+> **Si ya tenés el laboratorio configurado, no hagas el `rm -rf`**: se lleva `.env` y
+> `secrets/`, y con claves nuevas la base de Zabbix, la PSK de web01 y SNMPv3 dejan de
+> coincidir. Para pasar a esta versión seguí *Actualizar una instalación existente* en
+> `PUESTA-EN-MARCHA.md` (paso 5).
+
 Usá `127.0.0.1` y no `localhost`: son entradas distintas en `known_hosts`, y si la clave
 del host no está aceptada todavía, un comando con pipe falla sin poder preguntarte. Por el
 host-only la copia es más corta, sin `-P`:

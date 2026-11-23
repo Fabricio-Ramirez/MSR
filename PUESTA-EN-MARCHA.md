@@ -135,6 +135,42 @@ scp -r "$HOME\Desktop\Monitoreo y Sup\Obligatorio\obligatorio-docker" monitoreo@
 
 Si ya había una copia vieja, borrala primero con `ssh monitoreo@192.168.57.10 "rm -rf ~/obligatorio-docker"`. El `scp -r` **fusiona** con lo que exista en vez de reemplazarlo, y te puede dejar archivos de versiones anteriores.
 
+> **Si el laboratorio ya estaba funcionando y configurado en Zabbix, no borres la carpeta: seguí "Actualizar una instalación existente", más abajo.** El `rm -rf` se lleva `.env` y `secrets/`. La base de Zabbix, en cambio, sobrevive en su volumen con la contraseña vieja. `init.sh` generaría claves nuevas y quedarían tres cosas rotas: zabbix-server no entra a la base, el host web01 pierde la PSK y SNMPv3 deja de autenticar.
+
+### Actualizar una instalación existente
+
+Para pasar a la versión con monitoreo por contenedor (`mon-agent`, límites de `web01`, disco `/datos`) sin perder claves ni configuración:
+
+1. Desde PowerShell, copiá la versión nueva a una carpeta aparte:
+
+   ```
+   scp -r "$HOME\Desktop\Monitoreo y Sup\Obligatorio\MSR" monitoreo@192.168.57.10:~/obligatorio-nuevo
+   ```
+
+2. En la VM, pasale las claves de la instalación actual y cambiá una carpeta por la otra:
+
+   ```
+   cp -a ~/obligatorio-docker/.env ~/obligatorio-docker/secrets ~/obligatorio-nuevo/
+   mv ~/obligatorio-docker ~/obligatorio-viejo
+   mv ~/obligatorio-nuevo ~/obligatorio-docker
+   cd ~/obligatorio-docker
+   ```
+
+3. Creá el disco de web01 y levantá:
+
+   ```
+   sudo sh scripts/disco-web01.sh
+   sh scripts/iniciar.sh
+   ```
+
+   `init.sh` conserva lo que hay en `.env` y solo agrega las variables nuevas: límites de web01, `DOCKER_GID`, `PG_MONITOR_PASSWORD` y la PSK de `mon-agent`. `up -d --build` reconstruye web01 y crea mon-agent. Los demás contenedores y sus datos quedan como estaban.
+
+4. `sh scripts/verificar.sh` y, cuando dé todo OK, borrá `~/obligatorio-viejo`.
+
+**No corras `docker compose down -v`**: borra la base de Zabbix con toda la configuración del frontend.
+
+Después del primer reinicio de la VM, confirmá que el disco de web01 se montó antes que Docker: `sh scripts/disco-web01.sh --estado` tiene que decir que `/datos` es un montaje propio.
+
 Dentro de la VM, primero, **una sola vez por VM**, el disco propio de `web01`:
 
 ```

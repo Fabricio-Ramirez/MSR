@@ -85,8 +85,11 @@ if [ ! -f "$IMAGEN" ]; then
 fi
 
 # nofail: si la imagen faltara, la VM arranca igual en vez de quedar en modo emergencia.
+# x-systemd.before=docker.service: con nofail, systemd no espera este montaje para
+# seguir arrancando, y Docker podría levantar web01 antes; web01 quedaría apuntando a
+# la carpeta vacía de abajo y mediría otra vez el disco de la VM sin que nada avise.
 if ! grep -q "^$IMAGEN " /etc/fstab; then
-  echo "$IMAGEN $PUNTO ext4 loop,defaults,nofail 0 2" >> /etc/fstab
+  echo "$IMAGEN $PUNTO ext4 loop,defaults,nofail,x-systemd.before=docker.service 0 2" >> /etc/fstab
   echo "Agregada la entrada en /etc/fstab"
 fi
 
