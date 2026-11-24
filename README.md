@@ -564,7 +564,8 @@ docker compose up -d --build
 ### `init.sh`: `cannot create secrets/web01.psk: Is a directory`
 
 Pasa cuando se corrió `docker compose up` antes que `init.sh`: Docker no encuentra el
-archivo de la PSK que monta y crea una carpeta vacía con ese nombre. Desde la carpeta del
+archivo de la PSK que monta y crea una carpeta vacía con ese nombre. `init.sh` ahora borra
+esa carpeta solo si está vacía y es tuya; si es de root, frena. A mano, desde la carpeta del
 proyecto:
 
 ```bash
@@ -575,3 +576,22 @@ sh scripts/iniciar.sh
 
 `down` va **sin** `-v`, así no se borra la base de Zabbix. Si web01 ya estaba configurado en
 Zabbix, la PSK nueva hay que cargarla en el host desde el frontend (`cat secrets/web01.psk`).
+
+### Zabbix `unhealthy` / Grafana no acepta la contraseña: `password authentication failed`
+
+Pasa al reinstalar borrando la carpeta del proyecto: se genera un `.env` nuevo, pero los
+volúmenes `obligatorio-msr_zabbix_db` y `obligatorio-msr_grafana_data` sobreviven con las
+contraseñas viejas. Ahora `init.sh` frena antes de crear ese `.env`, `iniciar.sh` corta en
+cuanto aparece el error en los logs de `zabbix-server`, e iguala la contraseña de admin de
+Grafana con la de `.env` en cada arranque. Si la base no tiene nada que conservar, se arregla
+sin borrar nada:
+
+```bash
+set -a; . ./.env; set +a
+docker exec zabbix-db psql -U zabbix -d zabbix -c "ALTER USER zabbix WITH PASSWORD '$ZABBIX_DB_PASSWORD'"
+docker exec grafana grafana cli admin reset-admin-password "$GRAFANA_PASSWORD"
+docker compose restart zabbix-server zabbix-web
+```
+
+Grafana bloquea `admin` unos 5 minutos después de varios intentos fallidos
+(`too many consecutive incorrect login attempts`): hay que esperar sin volver a probar.
