@@ -560,3 +560,18 @@ Reiniciar todo desde cero, **borrando los datos de Zabbix, Grafana y Loki**:
 docker compose down -v
 docker compose up -d --build
 ```
+
+### `init.sh`: `cannot create secrets/web01.psk: Is a directory`
+
+Pasa cuando se corrió `docker compose up` antes que `init.sh`: Docker no encuentra el
+archivo de la PSK que monta y crea una carpeta vacía con ese nombre. Desde la carpeta del
+proyecto:
+
+```bash
+docker compose down
+sudo rm -rf secrets/web01.psk secrets/mon-agent.psk
+sh scripts/iniciar.sh
+```
+
+`down` va **sin** `-v`, así no se borra la base de Zabbix. Si web01 ya estaba configurado en
+Zabbix, la PSK nueva hay que cargarla en el host desde el frontend (`cat secrets/web01.psk`).
