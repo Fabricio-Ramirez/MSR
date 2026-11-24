@@ -10,6 +10,32 @@ umask 077
 
 mkdir -p secrets
 
+# Los volúmenes de Docker sobreviven a borrar la carpeta del proyecto. La base de Zabbix
+# y Grafana guardan la contraseña con la que se crearon la primera vez: si acá se genera
+# un .env nuevo sobre esos volúmenes, zabbix-server y zabbix-web no entran a la base
+# ("password authentication failed") y Grafana rechaza la contraseña de admin.
+# Si no se puede consultar a Docker (por ejemplo, falta sudo), se sigue sin comprobar.
+if [ ! -f .env ]; then
+  viejos=""
+  for v in zabbix_db grafana_data; do
+    if docker volume inspect "obligatorio-msr_$v" >/dev/null 2>&1; then
+      viejos="$viejos obligatorio-msr_$v"
+    fi
+  done
+  if [ -n "$viejos" ]; then
+    cat >&2 <<AVISO
+ERROR: no hay .env, pero quedan datos de una instalación anterior:$viejos
+Un .env nuevo traería contraseñas que esa base y Grafana no conocen. Elegí una:
+  - Conservar los datos: copiá acá el .env y la carpeta secrets/ de la instalación
+    anterior y volvé a correr este script.
+  - Empezar de cero (borra la configuración de Zabbix y Grafana):
+      docker compose down -v
+    y volvé a correr este script.
+AVISO
+    exit 1
+  fi
+fi
+
 if [ ! -f .env ]; then
   {
     echo "ZABBIX_DB_PASSWORD=$(openssl rand -hex 16)"
@@ -50,15 +76,26 @@ fi
 # Usuario de solo lectura con el que mon-agent monitorea PostgreSQL.
 agregar PG_MONITOR_PASSWORD "$(openssl rand -hex 12)"
 
-if [ ! -f secrets/web01.psk ]; then
-  openssl rand -hex 32 > secrets/web01.psk
-  echo "Creada PSK de web01"
-fi
+# Si se levantaron los contenedores antes que este script, Docker crea una carpeta
+# vacía en el lugar de cada archivo montado que falta (secrets/web01.psk/ en vez del
+# archivo) y escribir la PSK falla con "Is a directory". Se borra si está vacía; si
+# tiene algo, se frena para no perder nada.
+crear_psk() { # archivo nombre
+  if [ -d "$1" ]; then
+    rmdir "$1" 2>/dev/null || {
+      echo "ERROR: $1 es una carpeta y no se pudo borrar (¿no está vacía o es de root?)." >&2
+      echo "       Revisala y borrala a mano: sudo rm -rf $1" >&2
+      exit 1; }
+    echo "Borrada la carpeta $1 que había creado Docker"
+  fi
+  if [ ! -f "$1" ]; then
+    openssl rand -hex 32 > "$1"
+    echo "Creada PSK de $2"
+  fi
+}
 
-if [ ! -f secrets/mon-agent.psk ]; then
-  openssl rand -hex 32 > secrets/mon-agent.psk
-  echo "Creada PSK de mon-agent"
-fi
+crear_psk secrets/web01.psk web01
+crear_psk secrets/mon-agent.psk mon-agent
 
 # Los agentes corren con el usuario zabbix dentro de su contenedor y necesitan leer
 # la PSK. Aceptable en un laboratorio; .env queda restringido.

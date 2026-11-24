@@ -35,11 +35,31 @@ salud_grafana() {
   curl -sf -m 5 -o /dev/null http://192.168.56.23:3000/api/health 2>/dev/null
 }
 
+# Si la base se creó con otra contraseña (volumen de una instalación anterior con un
+# .env nuevo), Zabbix reintenta para siempre. Se corta apenas aparece en los logs.
+clave_db_vieja() {
+  docker logs --tail 20 zabbix-server 2>&1 | grep -q 'password authentication failed'
+}
+
 printf 'Esperando a que Zabbix y Grafana respondan'
 listo=no
 i=0
 while [ $i -lt 60 ]; do
   if api_zabbix && salud_grafana; then listo=si; break; fi
+  if clave_db_vieja; then
+    echo
+    cat >&2 <<AVISO
+ERROR: zabbix-server no puede entrar a PostgreSQL: "password authentication failed".
+La base es de una instalación anterior y se creó con otra contraseña que la de .env.
+  - Si tenés el .env viejo: restauralo (junto con secrets/) y volvé a correr este script.
+  - Si no, y la base no tiene nada que conservar, igualá la contraseña con la de .env:
+      set -a; . ./.env; set +a
+      docker exec zabbix-db psql -U zabbix -d zabbix -c "ALTER USER zabbix WITH PASSWORD '\$ZABBIX_DB_PASSWORD'"
+      docker compose restart zabbix-server zabbix-web
+  - O empezá de cero (borra todo): docker compose down -v && sh scripts/iniciar.sh
+AVISO
+    exit 1
+  fi
   printf '.'
   sleep 5
   i=$((i + 1))
@@ -57,6 +77,15 @@ usuario_pg_monitor() {
   docker exec zabbix-db psql -U zabbix -d zabbix -q -c     "CREATE USER zbx_monitor WITH PASSWORD '$PG_MONITOR_PASSWORD'; GRANT pg_monitor TO zbx_monitor;"     && echo "Creado el usuario zbx_monitor en PostgreSQL"
 }
 usuario_pg_monitor || echo "AVISO: no se pudo crear zbx_monitor en PostgreSQL; reintentá con sh scripts/iniciar.sh"
+
+# GF_SECURITY_ADMIN_PASSWORD solo se aplica la primera vez que Grafana crea su base. Si
+# el volumen viene de antes, la contraseña de admin sería otra que la de .env. Se iguala
+# en cada arranque; si ya coincide, no cambia nada.
+clave_grafana() {
+  set -a; . ./.env; set +a
+  docker exec grafana grafana cli admin reset-admin-password "$GRAFANA_PASSWORD" >/dev/null 2>&1
+}
+clave_grafana || echo "AVISO: no se pudo igualar la contraseña de admin de Grafana con la de .env"
 
 if [ "$listo" = no ]; then
   echo "AVISO: pasaron 5 minutos y algún servicio no respondió."
