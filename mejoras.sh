@@ -3,13 +3,13 @@
 # scripts/mejoras.sh
 #
 # Mejora 1: monitoreo por contenedor (agente Zabbix 2 en la VM + template Docker)
-# Mejora 4: monitoreo del propio monitoreo (salud de Zabbix + watchdog local con aviso a Telegram)
+# Mejora 2: monitoreo del propio monitoreo (salud de Zabbix + watchdog local con aviso a Telegram)
 #
 # Uso (desde la carpeta del proyecto, en master01):
 #   chmod +x scripts/mejoras.sh
-#   sudo scripts/mejoras.sh            # hace las dos mejoras
+#   sudo scripts/mejoras.sh            # hace las dos mejoras (primero la 1, después la 2)
 #   sudo scripts/mejoras.sh 1          # solo la mejora 1
-#   sudo scripts/mejoras.sh 4          # solo la mejora 4
+#   sudo scripts/mejoras.sh 2          # solo la mejora 2
 #
 # Variables opcionales (si no se pasan, el script las pregunta):
 #   ZBX_PASS   contraseña del usuario Admin de Zabbix
@@ -26,7 +26,8 @@ set -uo pipefail
 if [ "$(id -u)" -ne 0 ]; then exec sudo -E bash "$0" "$@"; fi
 
 QUE="${1:-todo}"
-case "$QUE" in todo|1|4) ;; *) echo "Uso: sudo scripts/mejoras.sh [todo|1|4]"; exit 1 ;; esac
+case "$QUE" in todo|1|2|4) ;; *) echo "Uso: sudo bash scripts/mejoras.sh [todo|1|2]"; exit 1 ;; esac
+[ "$QUE" = "2" ] && QUE=4      # internamente la mejora 2 es la rama "4"
 
 # ---------- parámetros (coinciden con el proyecto obligatorio-docker) ----------
 ZBX_URL="${ZBX_URL:-http://192.168.56.21:8080/api_jsonrpc.php}"
@@ -203,7 +204,7 @@ crear_trigger() { # nombre prioridad expresión
 }
 
 mejora4() {
-  paso "Mejora 4 · A. Salud interna de Zabbix"
+  paso "Mejora 2 · A. Salud interna de Zabbix"
 
   local SRV health_id keep clear params
   SRV=$(api host.get "$(jq -nc '{filter:{host:["Zabbix server"]},output:["hostid","status"],selectParentTemplates:["templateid","host"],selectInterfaces:["interfaceid","type"],selectHostGroups:["groupid"]}')")
@@ -234,7 +235,7 @@ mejora4() {
     && ok "'Zabbix server': activo, con 'Zabbix server health' y sin el template Linux" \
     || aviso "no pude actualizar el host 'Zabbix server'"
 
-  paso "Mejora 4 · B. Ítems y triggers de los servicios"
+  paso "Mejora 2 · B. Ítems y triggers de los servicios"
   crear_item "Base de datos PostgreSQL accesible" "net.tcp.service[tcp,192.168.56.22,5432]"
   crear_item "Loki accesible"                     "net.tcp.service[tcp,192.168.56.24,3100]"
   crear_item "Grafana accesible"                  "net.tcp.service[tcp,192.168.56.23,3000]"
@@ -242,11 +243,11 @@ mejora4() {
   crear_trigger "Loki inaccesible"                    4 'last(/Zabbix server/net.tcp.service[tcp,192.168.56.24,3100])=0'
   crear_trigger "Grafana inaccesible"                 3 'last(/Zabbix server/net.tcp.service[tcp,192.168.56.23,3000])=0'
 
-  paso "Mejora 4 · Acción de Telegram para los nuevos grupos"
+  paso "Mejora 2 · Acción de Telegram para los nuevos grupos"
   local ACT AID GIDS NUEVA infra
   infra=$(grupo_id "$GRUPO_INFRA")
   GIDS=$(echo "$SRV" | jq -c --arg i "$infra" '[.[0].hostgroups // .[0].groups // [] | .[].groupid] + [$i] | map(select(. != "")) | unique')
-  ACT=$(api action.get "$(jq -nc --arg n "$ACCION" '{filter:{name:[$n]},output:["actionid"],selectFilter:"extend"}')")
+  ACT=$(api action.get "$(jq -nc --arg n "$ACCION" '{search:{name:$n},output:["actionid","name"],selectFilter:"extend"}')")
   AID=$(echo "$ACT" | jq -r '.[0].actionid // empty')
   if [ -z "$AID" ]; then
     aviso "no encontré la acción '$ACCION'; agregá a mano los grupos 'Infraestructura' y 'Zabbix servers' a sus condiciones."
@@ -261,7 +262,7 @@ mejora4() {
       || aviso "no pude actualizar la acción; hacelo a mano (Alerts › Actions)"
   fi
 
-  paso "Mejora 4 · C. Watchdog local con aviso directo a Telegram"
+  paso "Mejora 2 · C. Watchdog local con aviso directo a Telegram"
   local in_tok="${TG_TOKEN:-}" in_chat="${TG_CHAT:-}" uid tkid mt tid_old
   TG_TOKEN=""; TG_CHAT=""; ZBX_TOKEN=""
   [ -f "$WD_ENV" ] && . "$WD_ENV"           # reutiliza lo guardado en corridas anteriores
@@ -271,7 +272,7 @@ mejora4() {
   # Token y chat ID: se leen de la configuración de Telegram que ya hay en Zabbix.
   if [ -z "$TG_TOKEN" ]; then
     TG_TOKEN=$(api mediatype.get '{"output":"extend","filter":{"name":["Telegram"]}}' 2>/dev/null \
-      | jq -r '[.[0].parameters[]? | select(.name=="Token") | .value] | .[0] // empty')
+      | jq -r '[.[0].parameters[]? | select(.name=="api_token" or .name=="Token") | .value] | .[0] // empty')
   fi
   if [ -z "$TG_CHAT" ]; then
     mt=$(api mediatype.get '{"output":["mediatypeid"],"filter":{"name":["Telegram"]}}' 2>/dev/null | jq -r '.[0].mediatypeid // empty')
@@ -286,7 +287,7 @@ mejora4() {
   TG_CHAT=$(printf '%s' "$TG_CHAT" | tr -d '[:space:][:cntrl:]')
 
   if [ -z "$TG_TOKEN" ] || [ -z "$TG_CHAT" ]; then
-    aviso "sin token o chat ID: watchdog omitido (volvé a correr 'sudo bash scripts/mejoras.sh 4')"
+    aviso "sin token o chat ID: watchdog omitido (volvé a correr 'sudo bash scripts/mejoras.sh 2')"
     return
   fi
   ok "token y chat ID de Telegram obtenidos"
@@ -408,7 +409,7 @@ cat <<'EOF'
     - Zabbix › Data collection › Hosts: master01 con ZBX en verde (PSK oculta en la captura).
     - Monitoring › Latest data › master01: ítems por contenedor (CPU, memoria, estado).
     - Correr scripts/pruebas.sh p1 y capturar la gráfica del contenedor web01 frente a los demás.
-  Mejora 4
+  Mejora 2
     - Zabbix › Hosts › Zabbix server: ítems y triggers nuevos.
     - docker stop loki   -> en 1-2 min llega el aviso a Telegram; docker start loki -> la recuperación.
     - docker stop zabbix-server -> en ~3 min el watchdog avisa a Telegram; docker start zabbix-server -> aviso de recuperación.
